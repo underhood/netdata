@@ -307,6 +307,12 @@ AC_CHECK_LIB(
 # libwebsockets pure C library for implementing modern network protocols
 
 if test "${ACLK}" = "yes"; then
+    PKG_CHECK_MODULES(
+        [LWS],
+        [libwebsockets],
+        [have_lws=yes],
+        []
+    )
     AC_CHECK_LIB(
         [websockets],
         [lws_set_timer_usecs],

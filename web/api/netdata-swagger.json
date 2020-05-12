@@ -1091,6 +1091,17 @@
               "host2.example.com"
             ]
           },
+          "mirrored_hosts_guids": {
+            "type": "array",
+            "description": "List of guids of hosts from \"mirrored_hosts\" array.",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "955b38ac-c10b-4eb9-b794-43908f0089b0",
+              "1343c3b9-072d-4f03-9ae6-a5979f39a3fe"
+            ]
+          },
           "os_name": {
             "type": "string",
             "description": "Operating System Name.",

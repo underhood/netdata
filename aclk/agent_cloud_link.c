@@ -1672,11 +1672,11 @@ void aclk_send_alarm_metadata()
 }
 
 /*
- * This will send the agent metadata
+ * This will send the agent metadata for single RRDHOST
  *    /api/v1/info
  *    charts
  */
-int aclk_send_info_metadata()
+int aclk_send_info_metadata_host(RRDHOST *host)
 {
     BUFFER *local_buffer = buffer_create(NETDATA_WEB_RESPONSE_INITIAL_SIZE);
 
@@ -1697,11 +1697,11 @@ int aclk_send_info_metadata()
     buffer_strcat(local_buffer, ",\n\t\"payload\": ");
 
     buffer_sprintf(local_buffer, "{\n\t \"info\" : ");
-    web_client_api_request_v1_info_fill_buffer(localhost, local_buffer);
+    web_client_api_request_v1_info_fill_buffer(host, local_buffer);
     debug(D_ACLK, "Metadata %s with info has %zu bytes", msg_id, local_buffer->len);
 
     buffer_sprintf(local_buffer, ", \n\t \"charts\" : ");
-    charts2json(localhost, local_buffer, 1);
+    charts2json(host, local_buffer, 1);
     buffer_sprintf(local_buffer, "\n}\n}");
     debug(D_ACLK, "Metadata %s with chart has %zu bytes", msg_id, local_buffer->len);
 
@@ -1709,6 +1709,22 @@ int aclk_send_info_metadata()
 
     freez(msg_id);
     buffer_free(local_buffer);
+    return 0;
+}
+
+/*
+ * This will send the agent metadata for all RRDHOSTs
+ *    /api/v1/info
+ *    charts
+ */
+int aclk_send_info_metadata()
+{
+    RRDHOST *rc;
+    rrd_rdlock();
+    rrdhost_foreach_read(rc)
+        aclk_send_info_metadata_host(rc);
+
+    rrd_unlock();
     return 0;
 }
 

@@ -835,6 +835,7 @@ int aclk_process_query()
 {
     struct aclk_query *this_query;
     static long int query_count = 0;
+    RRDHOST *host;
 
     if (!aclk_connected)
         return 0;
@@ -887,6 +888,13 @@ int aclk_process_query()
         case ACLK_CMD_CLOUD:
             debug(D_ACLK, "EXECUTING a cloud command");
             aclk_execute_query(this_query);
+            break;
+
+        case ACLK_CMD_NEWSLAVE:
+            debug(D_ACLK, "EXECUTING newslave command");
+            host = rrdhost_find_by_guid(this_query->data, 0);
+            if(host)
+                aclk_send_info_metadata_host(host);
             break;
 
         default:
@@ -1677,6 +1685,11 @@ void aclk_send_alarm_metadata()
     buffer_free(local_buffer);
 }
 
+static char *metadata_msgtypes[][2] = {
+    { "connect", "update" },
+    { "slave-connect", "slave-update" }
+};
+
 /*
  * This will send the agent metadata for single RRDHOST
  *    /api/v1/info
@@ -1697,9 +1710,9 @@ int aclk_send_info_metadata_host(RRDHOST *host)
     // a fake on_connect message then use the real timestamp to indicate it is within the existing
     // session.
     if (aclk_metadata_submitted == ACLK_METADATA_SENT)
-        aclk_create_header(local_buffer, "update", msg_id, 0, 0, NULL);
+        aclk_create_header(local_buffer, metadata_msgtypes[(host != localhost)][1], msg_id, 0, 0, host->machine_guid); //update
     else
-        aclk_create_header(local_buffer, "connect", msg_id, aclk_session_sec, aclk_session_us, NULL);
+        aclk_create_header(local_buffer, metadata_msgtypes[(host != localhost)][0], msg_id, aclk_session_sec, aclk_session_us, host->machine_guid); //connect
     buffer_strcat(local_buffer, ",\n\t\"payload\": ");
 
     buffer_sprintf(local_buffer, "{\n\t \"info\" : ");
@@ -1966,4 +1979,12 @@ int aclk_handle_cloud_request(char *payload)
 
     // Note: the payload comes from the callback and it will be automatically freed
     return 0;
+}
+
+void aclk_host_connected_notif(RRDHOST *host){
+    if (aclk_metadata_submitted != ACLK_METADATA_SENT)
+        return;
+
+    error("ACLK_HOST CREATED NOTIF POST");
+    aclk_queue_query("new_slave", host->machine_guid, NULL, NULL, 0, 1, ACLK_CMD_NEWSLAVE);
 }

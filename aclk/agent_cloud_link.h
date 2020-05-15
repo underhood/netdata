@@ -44,7 +44,8 @@ typedef enum aclk_cmd {
     ACLK_CMD_CHART,
     ACLK_CMD_CHARTDEL,
     ACLK_CMD_ALARM,
-    ACLK_CMD_MAX
+    ACLK_CMD_MAX,
+    ACLK_CMD_NEWSLAVE
 } ACLK_CMD;
 
 typedef enum aclk_metadata_state {
@@ -84,6 +85,7 @@ void aclk_disconnect();
 void aclk_connect();
 int aclk_send_metadata();
 int aclk_send_info_metadata();
+int aclk_send_info_metadata_host(RRDHOST *host);
 int aclk_wait_for_initialization();
 char *create_publish_base_topic();
 
@@ -105,5 +107,7 @@ unsigned long int aclk_reconnect_delay(int mode);
 extern void health_alarm_entry2json_nolock(BUFFER *wb, ALARM_ENTRY *ae, RRDHOST *host);
 void aclk_single_update_enable();
 void aclk_single_update_disable();
+
+void aclk_host_connected_notif(RRDHOST *host);
 
 #endif //NETDATA_AGENT_CLOUD_LINK_H

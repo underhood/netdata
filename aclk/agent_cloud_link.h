@@ -45,7 +45,8 @@ typedef enum aclk_cmd {
     ACLK_CMD_CHARTDEL,
     ACLK_CMD_ALARM,
     ACLK_CMD_MAX,
-    ACLK_CMD_NEWSLAVE
+    ACLK_CMD_NEWSLAVE,
+    ACLK_CMD_DELSLAVE
 } ACLK_CMD;
 
 typedef enum aclk_metadata_state {
@@ -109,5 +110,8 @@ void aclk_single_update_enable();
 void aclk_single_update_disable();
 
 void aclk_host_connected_notif(RRDHOST *host);
+void aclk_host_disconnect_notif(RRDHOST *host);
+
+int aclk_send_info_slave_disconnect(RRDHOST *host);
 
 #endif //NETDATA_AGENT_CLOUD_LINK_H

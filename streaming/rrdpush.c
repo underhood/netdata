@@ -1310,6 +1310,14 @@ static int rrdpush_receive(int fd
         if(health_enabled == CONFIG_BOOLEAN_AUTO)
             host->health_enabled = 0;
     }
+
+#ifdef ENABLE_ACLK
+    // in case we have cloud connection we inform cloud
+    // new slave connected
+    // call this after updating host->connected_senders
+    if (netdata_cloud_setting)
+        aclk_host_disconnect_notif(host);
+#endif
     rrdhost_unlock(host);
 
     if(host->connected_senders == 0)

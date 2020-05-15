@@ -891,10 +891,20 @@ int aclk_process_query()
             break;
 
         case ACLK_CMD_NEWSLAVE:
+        case ACLK_CMD_DELSLAVE:
             debug(D_ACLK, "EXECUTING newslave command");
             host = rrdhost_find_by_guid(this_query->data, 0);
-            if(host)
+            if(!host) {
+                errno = 0;
+                error("Couldn't find host with guid \"%s\".", this_query->data);
+                break;
+            }
+
+            if(this_query->cmd == ACLK_CMD_NEWSLAVE)
                 aclk_send_info_metadata_host(host);
+            else
+                aclk_send_info_slave_disconnect(host);
+
             break;
 
         default:
@@ -1747,6 +1757,30 @@ int aclk_send_info_metadata()
     return 0;
 }
 
+int aclk_send_info_slave_disconnect(RRDHOST *host)
+{
+    BUFFER *local_buffer = buffer_create(NETDATA_WEB_RESPONSE_INITIAL_SIZE);
+    local_buffer->contenttype = CT_APPLICATION_JSON;
+
+    debug(D_ACLK, "Slave Disconnect");
+
+    char *msg_id = create_uuid();
+
+    aclk_create_header(local_buffer, "slave_disconnect", msg_id, 0, 0, host->machine_guid);
+
+/* TODO:timo ask cloud if payload is a must
+    buffer_strcat(local_buffer, ",\n\t\"payload\": ");
+
+    buffer_sprintf(local_buffer, "{\n\t \"guid\": \"%s\" }\n}", host->machine_guid); */
+    buffer_strcat(local_buffer, "\n}\n");
+
+    aclk_send_message(ACLK_METADATA_TOPIC, local_buffer->buffer, msg_id);
+
+    freez(msg_id);
+    buffer_free(local_buffer);
+    return 0;
+}
+
 void aclk_send_stress_test(size_t size)
 {
     char *buffer = mallocz(size);
@@ -1987,4 +2021,12 @@ void aclk_host_connected_notif(RRDHOST *host){
 
     error("ACLK_HOST CREATED NOTIF POST");
     aclk_queue_query("new_slave", host->machine_guid, NULL, NULL, 0, 1, ACLK_CMD_NEWSLAVE);
+}
+
+void aclk_host_disconnect_notif(RRDHOST *host){
+    if (aclk_metadata_submitted != ACLK_METADATA_SENT)
+        return;
+
+    error("ACLK_HOST GONE NOTIF POST");
+    aclk_queue_query("del_slave", host->machine_guid, NULL, NULL, 0, 1, ACLK_CMD_DELSLAVE);
 }

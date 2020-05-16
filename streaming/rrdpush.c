@@ -1279,7 +1279,7 @@ static int rrdpush_receive(int fd
     // new slave connected
     // call this after updating host->connected_senders
     if (netdata_cloud_setting)
-        aclk_host_connected_notif(host);
+        aclk_host_state_update(host, ACLK_CMD_NEWSLAVE);
 #endif
 
     if(health_enabled != CONFIG_BOOLEAN_NO) {
@@ -1316,7 +1316,7 @@ static int rrdpush_receive(int fd
     // new slave connected
     // call this after updating host->connected_senders
     if (netdata_cloud_setting)
-        aclk_host_disconnect_notif(host);
+        aclk_host_state_update(host, ACLK_CMD_DELSLAVE);
 #endif
     rrdhost_unlock(host);
 

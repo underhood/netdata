@@ -109,8 +109,7 @@ extern void health_alarm_entry2json_nolock(BUFFER *wb, ALARM_ENTRY *ae, RRDHOST 
 void aclk_single_update_enable();
 void aclk_single_update_disable();
 
-void aclk_host_connected_notif(RRDHOST *host);
-void aclk_host_disconnect_notif(RRDHOST *host);
+void aclk_host_state_update(RRDHOST *host, ACLK_CMD cmd);
 
 int aclk_send_info_slave_disconnect(RRDHOST *host);
 

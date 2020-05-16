@@ -2015,18 +2015,21 @@ int aclk_handle_cloud_request(char *payload)
     return 0;
 }
 
-void aclk_host_connected_notif(RRDHOST *host){
+void aclk_host_state_update(RRDHOST *host, ACLK_CMD cmd)
+{
     if (aclk_metadata_submitted != ACLK_METADATA_SENT)
         return;
 
-    error("ACLK_HOST CREATED NOTIF POST");
-    aclk_queue_query("new_slave", host->machine_guid, NULL, NULL, 0, 1, ACLK_CMD_NEWSLAVE);
-}
-
-void aclk_host_disconnect_notif(RRDHOST *host){
-    if (aclk_metadata_submitted != ACLK_METADATA_SENT)
-        return;
-
-    error("ACLK_HOST GONE NOTIF POST");
-    aclk_queue_query("del_slave", host->machine_guid, NULL, NULL, 0, 1, ACLK_CMD_DELSLAVE);
+    switch (cmd) {
+        case ACLK_CMD_NEWSLAVE:
+            debug(D_ACLK, "New slave %s %s.", host->hostname, host->machine_guid);
+            aclk_queue_query("new_slave", host->machine_guid, NULL, NULL, 0, 1, ACLK_CMD_NEWSLAVE);
+            break;
+        case ACLK_CMD_DELSLAVE:
+            debug(D_ACLK, "Slave disconnect %s %s.", host->hostname, host->machine_guid);
+            aclk_queue_query("del_slave", host->machine_guid, NULL, NULL, 0, 1, ACLK_CMD_DELSLAVE);
+            break;
+        default:
+            error("Unknown command for aclk_host_state_update %d.", cmd);
+    }
 }

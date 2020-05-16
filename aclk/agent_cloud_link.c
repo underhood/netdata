@@ -800,7 +800,7 @@ int aclk_execute_query(struct aclk_query *this_query)
         buffer_flush(local_buffer);
         local_buffer->contenttype = CT_APPLICATION_JSON;
 
-        aclk_create_header(local_buffer, "http", this_query->msg_id, 0, 0);
+        aclk_create_header(local_buffer, "http", this_query->msg_id, 0, 0, NULL); //TODO:timo,abe16820-712a-4701-a35d-84db7b3bccbb
         buffer_strcat(local_buffer, ",\n\t\"payload\": ");
         char *encoded_response = aclk_encode_response(w->response.data->buffer, w->response.data->len, 0);
         char *encoded_header = aclk_encode_response(w->response.header_output->buffer, w->response.header_output->len, 1);
@@ -1008,7 +1008,7 @@ static void aclk_main_cleanup(void *ptr)
         QUERY_THREAD_WAKEUP;
         // Send a graceful disconnect message
         BUFFER *b = buffer_create(512);
-        aclk_create_header(b, "disconnect", NULL, 0, 0);
+        aclk_create_header(b, "disconnect", NULL, 0, 0, NULL);
         buffer_strcat(b, ",\n\t\"payload\": \"graceful\"}\n");
         aclk_send_message(ACLK_METADATA_TOPIC, (char*)buffer_tostring(b), NULL);
         buffer_free(b);
@@ -1585,7 +1585,7 @@ void aclk_shutdown()
     info("Shutdown complete");
 }
 
-inline void aclk_create_header(BUFFER *dest, char *type, char *msg_id, time_t ts_secs, usec_t ts_us)
+inline void aclk_create_header(BUFFER *dest, char *type, char *msg_id, time_t ts_secs, usec_t ts_us, char *rrdhost_guid)
 {
     uuid_t uuid;
     char uuid_str[36 + 1];
@@ -1613,6 +1613,13 @@ inline void aclk_create_header(BUFFER *dest, char *type, char *msg_id, time_t ts
         "\t\"version\": %d",
         type, msg_id, ts_secs, ts_us, aclk_session_sec, aclk_session_us, ACLK_VERSION);
 
+    if(rrdhost_guid) {
+        // optional field, if not set asume the message is related to
+        // host that sends the message (based on topic->guid translation)
+        // this also ensures backward compatibility with older agents
+        buffer_sprintf(dest, ",\n\t\"host-guid\": \"%s\"", rrdhost_guid);
+    }
+
     debug(D_ACLK, "Sending v%d msgid [%s] type [%s] time [%ld]", ACLK_VERSION, msg_id, type, ts_secs);
 }
 
@@ -1639,9 +1646,9 @@ void aclk_send_alarm_metadata()
     // a fake on_connect message then use the real timestamp to indicate it is within the existing
     // session.
     if (aclk_metadata_submitted == ACLK_METADATA_SENT)
-        aclk_create_header(local_buffer, "connect_alarms", msg_id, 0, 0);
+        aclk_create_header(local_buffer, "connect_alarms", msg_id, 0, 0, NULL);
     else
-        aclk_create_header(local_buffer, "connect_alarms", msg_id, aclk_session_sec, aclk_session_us);
+        aclk_create_header(local_buffer, "connect_alarms", msg_id, aclk_session_sec, aclk_session_us, NULL);
     buffer_strcat(local_buffer, ",\n\t\"payload\": ");
 
 
@@ -1684,9 +1691,9 @@ int aclk_send_info_metadata()
     // a fake on_connect message then use the real timestamp to indicate it is within the existing
     // session.
     if (aclk_metadata_submitted == ACLK_METADATA_SENT)
-        aclk_create_header(local_buffer, "update", msg_id, 0, 0);
+        aclk_create_header(local_buffer, "update", msg_id, 0, 0, NULL);
     else
-        aclk_create_header(local_buffer, "connect", msg_id, aclk_session_sec, aclk_session_us);
+        aclk_create_header(local_buffer, "connect", msg_id, aclk_session_sec, aclk_session_us, NULL);
     buffer_strcat(local_buffer, ",\n\t\"payload\": ");
 
     buffer_sprintf(local_buffer, "{\n\t \"info\" : ");
@@ -1781,7 +1788,7 @@ int aclk_send_single_chart(char *hostname, char *chart)
     buffer_flush(local_buffer);
     local_buffer->contenttype = CT_APPLICATION_JSON;
 
-    aclk_create_header(local_buffer, "chart", msg_id, 0, 0);
+    aclk_create_header(local_buffer, "chart", msg_id, 0, 0, target_host->machine_guid);
     buffer_strcat(local_buffer, ",\n\t\"payload\": ");
 
     rrdset2json(st, local_buffer, NULL, NULL, 1);
@@ -1848,7 +1855,7 @@ int aclk_update_alarm(RRDHOST *host, ALARM_ENTRY *ae)
     char *msg_id = create_uuid();
 
     buffer_flush(local_buffer);
-    aclk_create_header(local_buffer, "status-change", msg_id, 0, 0);
+    aclk_create_header(local_buffer, "status-change", msg_id, 0, 0, NULL);
     buffer_strcat(local_buffer, ",\n\t\"payload\": ");
 
     netdata_rwlock_rdlock(&host->health_log.alarm_log_rwlock);

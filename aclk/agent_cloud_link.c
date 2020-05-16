@@ -1887,9 +1887,6 @@ int aclk_update_chart(RRDHOST *host, char *chart_name, ACLK_CMD aclk_cmd)
         return 1;
     }
 
-    if (host != localhost)
-        return 0;
-
     if (unlikely(aclk_disable_single_updates))
         return 0;
 

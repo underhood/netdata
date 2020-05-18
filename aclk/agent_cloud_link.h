@@ -46,7 +46,8 @@ typedef enum aclk_cmd {
     ACLK_CMD_ALARM,
     ACLK_CMD_MAX,
     ACLK_CMD_NEWSLAVE,
-    ACLK_CMD_DELSLAVE
+    ACLK_CMD_DELSLAVE,
+    ACLK_CMD_PUSH_UPDATE
 } ACLK_CMD;
 
 typedef enum aclk_metadata_state {
@@ -110,6 +111,8 @@ void aclk_single_update_enable();
 void aclk_single_update_disable();
 
 void aclk_host_state_update(RRDHOST *host, ACLK_CMD cmd);
+void aclk_rrdpush_state_change();
+void aclk_send_rrdpush_update();
 
 int aclk_send_info_slave_disconnect(RRDHOST *host);
 

@@ -502,6 +502,10 @@ static inline void rrdpush_sender_thread_close_socket(RRDHOST *host) {
     host->rrdpush_sender_connected = 0;
 
     if(host->rrdpush_sender_socket != -1) {
+#ifdef ENABLE_ACLK
+        if (netdata_cloud_setting)
+            aclk_rrdpush_state_change();
+#endif
         close(host->rrdpush_sender_socket);
         host->rrdpush_sender_socket = -1;
     }
@@ -893,6 +897,11 @@ void *rrdpush_sender_thread(void *ptr) {
 
                     // let the data collection threads know we are ready
                     host->rrdpush_sender_connected = 1;
+
+#ifdef ENABLE_ACLK
+                    if (netdata_cloud_setting)
+                        aclk_rrdpush_state_change();
+#endif
                 }
                 else {
                     // increase the failed connections counter

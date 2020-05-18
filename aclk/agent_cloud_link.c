@@ -907,6 +907,11 @@ int aclk_process_query()
 
             break;
 
+        case ACLK_CMD_PUSH_UPDATE:
+            debug(D_ACLK, "EXECUTING push_update");
+            aclk_send_rrdpush_update();
+            break;
+
         default:
             break;
     }
@@ -2036,4 +2041,42 @@ void aclk_host_state_update(RRDHOST *host, ACLK_CMD cmd)
         default:
             error("Unknown command for aclk_host_state_update %d.", cmd);
     }
+}
+
+void aclk_rrdpush_state_change()
+{
+    if (aclk_metadata_submitted != ACLK_METADATA_SENT)
+        return;
+
+    aclk_queue_query("rrdpush_conn_update", NULL, NULL, NULL, 3, 1, ACLK_CMD_PUSH_UPDATE);
+}
+
+void aclk_send_rrdpush_update()
+{
+    RRDHOST *rc;
+    BUFFER *tx_buff = buffer_create(NETDATA_WEB_RESPONSE_INITIAL_SIZE);
+    char *msg_id = create_uuid();
+
+    tx_buff->contenttype = CT_APPLICATION_JSON;
+
+    debug(D_ACLK, "State of connection to master changed. Sending.");
+
+    aclk_create_header(tx_buff, "streaming_connection_update", msg_id, 0, 0, NULL);
+    buffer_strcat(tx_buff, ",\n\t\"payload\": [\n");
+
+    rrd_rdlock();
+
+    rrdhost_foreach_read(rc) {
+        buffer_sprintf(tx_buff, "\t{ \"guid\": \"%s\", \"streaming\": %s }\n", rc->machine_guid, (rc->rrdpush_sender_connected ? "true" : "false") );
+    }
+
+    rrd_unlock();
+
+    buffer_sprintf(tx_buff, "]\n}\n");
+
+    aclk_send_message(ACLK_METADATA_TOPIC, tx_buff->buffer, msg_id);
+
+    freez(msg_id);
+    buffer_free(tx_buff);
+    return;
 }

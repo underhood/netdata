@@ -1360,6 +1360,7 @@ void *aclk_main(void *ptr)
 {
     struct netdata_static_thread *static_thread = (struct netdata_static_thread *)ptr;
     struct netdata_static_thread *query_thread;
+    time_t last_periodic_query_wakeup = 0;
 
     // This thread is unusual in that it cannot be cancelled by cancel_main_threads()
     // as it must notify the far end that it shutdown gracefully and avoid the LWT.
@@ -1482,6 +1483,12 @@ void *aclk_main(void *ptr)
             netdata_thread_create(
                 query_thread->thread, ACLK_THREAD_NAME, NETDATA_THREAD_OPTION_DEFAULT, aclk_query_main_thread,
                 query_thread);
+        }
+
+        if(aclk_connected && aclk_metadata_submitted == ACLK_METADATA_SENT && last_periodic_query_wakeup < now_monotonic_sec()) {
+            // to make `aclk_queue_query()` param `run_after` work
+            last_periodic_query_wakeup = now_monotonic_sec();
+            QUERY_THREAD_WAKEUP;
         }
     } // forever
 exited:

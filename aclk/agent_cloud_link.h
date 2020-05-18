@@ -87,7 +87,7 @@ int aclk_send_info_metadata();
 int aclk_wait_for_initialization();
 char *create_publish_base_topic();
 
-int aclk_send_single_chart(char *host, char *chart);
+int aclk_send_single_chart(char *host_guid, char *chart);
 int aclk_queue_query(char *token, char *data, char *msg_type, char *query, int run_after, int internal, ACLK_CMD cmd);
 struct aclk_query *
 aclk_query_find(char *token, char *data, char *msg_id, char *query, ACLK_CMD cmd, struct aclk_query **last_query);

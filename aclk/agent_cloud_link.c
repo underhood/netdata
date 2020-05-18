@@ -869,8 +869,14 @@ int aclk_process_query()
 
         case ACLK_CMD_CHARTDEL:
             debug(D_ACLK, "EXECUTING a chart delete command");
+            host = rrdhost_find_by_guid(this_query->data, 0);
+            if(!host) {
+                errno = 0;
+                error("Couldn't find host with guid \"%s\".", this_query->data);
+                break;
+            }
             //TODO: This send the info metadata for now
-            aclk_send_info_metadata();
+            aclk_send_info_metadata_host(host);
             break;
 
         case ACLK_CMD_ALARM:
@@ -1783,11 +1789,11 @@ void aclk_alarm_reload()
 }
 //rrd_stats_api_v1_chart(RRDSET *st, BUFFER *buf)
 
-int aclk_send_single_chart(char *hostname, char *chart)
+int aclk_send_single_chart(char *host_guid, char *chart)
 {
     RRDHOST *target_host;
 
-    target_host = rrdhost_find_by_hostname(hostname, 0);
+    target_host = rrdhost_find_by_guid(host_guid, 0);
     if (!target_host)
         return 1;
 
@@ -1827,6 +1833,13 @@ int aclk_update_chart(RRDHOST *host, char *chart_name, ACLK_CMD aclk_cmd)
     if (!netdata_cloud_setting)
         return 0;
 
+    if (aclk_cmd != ACLK_CMD_CHART && aclk_cmd != ACLK_CMD_CHARTDEL)
+    {
+        errno = 0;
+        error("Unknown command %ud", aclk_cmd);
+        return 1;
+    }
+
     if (host != localhost)
         return 0;
 
@@ -1836,7 +1849,7 @@ int aclk_update_chart(RRDHOST *host, char *chart_name, ACLK_CMD aclk_cmd)
     if (unlikely(agent_state == AGENT_INITIALIZING))
         last_init_sequence = now_realtime_sec();
     else {
-        if (unlikely(aclk_queue_query("_chart", host->hostname, NULL, chart_name, 0, 1, aclk_cmd))) {
+        if (unlikely(aclk_queue_query("_chart", host->machine_guid, NULL, chart_name, 0, 1, aclk_cmd))) {
             if (likely(aclk_connected)) {
                 errno = 0;
                 error("ACLK failed to queue chart_update command");

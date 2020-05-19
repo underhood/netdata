@@ -30,12 +30,16 @@ time_t aclk_session_sec = 0;        // Used by the mqtt layer
 static netdata_mutex_t aclk_mutex = NETDATA_MUTEX_INITIALIZER;
 static netdata_mutex_t query_mutex = NETDATA_MUTEX_INITIALIZER;
 static netdata_mutex_t collector_mutex = NETDATA_MUTEX_INITIALIZER;
+static netdata_mutex_t aclk_hostlist_mutex = NETDATA_MUTEX_INITIALIZER;
 
 #define ACLK_LOCK netdata_mutex_lock(&aclk_mutex)
 #define ACLK_UNLOCK netdata_mutex_unlock(&aclk_mutex)
 
 #define COLLECTOR_LOCK netdata_mutex_lock(&collector_mutex)
 #define COLLECTOR_UNLOCK netdata_mutex_unlock(&collector_mutex)
+
+#define ACLK_HOSTLIST_LOCK netdata_mutex_lock(&aclk_hostlist_mutex)
+#define ACLK_HOSTLIST_UNLOCK netdata_mutex_unlock(&aclk_hostlist_mutex)
 
 #define QUERY_LOCK netdata_mutex_lock(&query_mutex)
 #define QUERY_UNLOCK netdata_mutex_unlock(&query_mutex)
@@ -68,6 +72,23 @@ struct _collector {
 };
 
 struct _collector *collector_list = NULL;
+
+struct _aclk_host_status {
+    // host info
+    char *guid;
+    uint32_t guid_hash;
+    AGENT_STATE state;
+    int slave_connect_sent;
+
+    // popcorn timing stuff
+    time_t timestamp_created;
+    time_t timestamp_last_update;
+
+    // plumbing
+    struct _aclk_host_status *next;
+};
+
+struct _aclk_host_status *known_slave_list = NULL;
 
 struct aclk_query {
     time_t created;
@@ -479,6 +500,191 @@ char *get_topic(char *sub_topic, char *final_topic, int max_size)
 }
 
 /*
+ * Find last elem in list
+ */
+static inline struct _aclk_host_status *_aclk_hostlist_gettail()
+{
+    struct _aclk_host_status *tail = known_slave_list;
+    if (!tail)
+        return NULL;
+    while (tail->next)
+        tail = tail->next;
+    return tail;
+}
+
+/*
+ * Finds if host already in the list
+ */
+static struct _aclk_host_status *_aclk_hostlist_find(RRDHOST *host)
+{
+    struct _aclk_host_status *ptr = known_slave_list;
+    while (ptr) {
+        if (ptr->guid_hash == host->hash_machine_guid && strcmp(ptr->guid, host->machine_guid) == 0)
+            return ptr;
+        ptr = ptr->next;
+    }
+    return NULL;
+}
+
+static inline void _aclk_hostlist_append(struct _aclk_host_status *host)
+{
+    struct _aclk_host_status *tail = _aclk_hostlist_gettail();
+    if (tail)
+        tail->next = host;
+    else
+        known_slave_list = host;
+}
+
+static void aclk_hostlist_cleanup()
+{
+    ACLK_HOSTLIST_LOCK;
+    struct _aclk_host_status *next = known_slave_list;
+    struct _aclk_host_status *cur;
+    while(next) {
+        cur = next;
+        next = cur->next;
+        freez(cur->guid);
+        freez(cur);
+    }
+    ACLK_HOSTLIST_UNLOCK;
+}
+
+/*
+ * Add slave to the list of known hosts and start popcorning for it
+ */
+static void aclk_hostlist_add(RRDHOST *host)
+{
+    ACLK_HOSTLIST_LOCK;
+    struct _aclk_host_status *new = _aclk_hostlist_find(host);
+    time_t now = now_monotonic_sec();
+
+    if (!new) {
+        new = callocz(1, sizeof(struct _aclk_host_status));
+        new->guid = strdupz(host->machine_guid);
+        new->guid_hash = host->hash_machine_guid;
+        new->timestamp_created = now;
+
+        _aclk_hostlist_append(new);
+    }
+
+    new->state = AGENT_INITIALIZING;
+    new->timestamp_last_update = now;
+    ACLK_HOSTLIST_UNLOCK;
+}
+
+/*
+ * Check if any slave is popcorning and queue slave_connect msg if yes
+ */
+void aclk_hostlist_handle_popcorning()
+{
+    ACLK_HOSTLIST_LOCK;
+    static time_t last_call = 0;
+    struct _aclk_host_status *host = known_slave_list;
+    time_t t_passed;
+    time_t now = now_monotonic_sec();
+
+    // the query thread can be woken up more often than once per second (minimal)
+    // but it makes no sense to check again if at least second didn't pass
+    if (now - last_call <= 0) {
+        ACLK_HOSTLIST_UNLOCK;
+        return;
+    }
+
+    last_call = now;
+
+    while (host) {
+        t_passed = now - host->timestamp_last_update;
+        if (host->state == AGENT_INITIALIZING) {
+            if (t_passed > ACLK_STABLE_TIMEOUT) {
+                host->state = AGENT_STABLE;
+                aclk_queue_query("new_slave", host->guid, NULL, NULL, 0, 1, ACLK_CMD_NEWSLAVE);
+                info("STABLE streaming slave \"%s\" sending data co cloud.", host->guid);
+            } else
+                info("Waiting for streaming slave \"%s\" to stabilize. Passed %ld", host->guid, t_passed);
+        }
+        host = host->next;
+    }
+    ACLK_HOSTLIST_UNLOCK;
+}
+
+int aclk_hostlist_popcorning_extend(RRDHOST *host)
+{
+    int ret = 0;
+    ACLK_HOSTLIST_LOCK;
+    struct _aclk_host_status *status = _aclk_hostlist_find(host);
+
+    if (status && status->state == AGENT_INITIALIZING) {
+        status->timestamp_last_update = now_monotonic_sec();
+        ret = 1;
+    }
+    ACLK_HOSTLIST_UNLOCK;
+    return ret;
+}
+
+static inline int aclk_is_host_initializing(RRDHOST *host)
+{
+    // TODO use the hostlist popcorning also for localhost!!
+    // to simplify and cleanup the code
+    struct _aclk_host_status *status;
+    int ret = 0;
+
+    if (host == localhost)
+        ret = (agent_state == AGENT_INITIALIZING);
+    else {
+        ACLK_HOSTLIST_LOCK;
+        status = _aclk_hostlist_find(host);
+        if (status && status->state == AGENT_INITIALIZING)
+            ret = 1;
+        ACLK_HOSTLIST_UNLOCK;
+    }
+    return ret;
+}
+
+static inline int aclk_popcorn_bump(RRDHOST *host)
+{
+    // TODO use the hostlist popcorning also for localhost!!
+    // to simplify and cleanup the code
+    if (host == localhost) {
+        if (unlikely(agent_state == AGENT_INITIALIZING)) {
+            last_init_sequence = now_realtime_sec();
+            return 1;
+        }
+    } else if (aclk_hostlist_popcorning_extend(host))
+        return 1;
+    return 0;
+}
+
+static inline void aclk_hostlist_metadata_sent(RRDHOST *host)
+{
+    ACLK_HOSTLIST_LOCK;
+
+    struct _aclk_host_status *host_status = _aclk_hostlist_find(host);
+    if (!host_status) {
+        error("Unknown host %s", host->machine_guid);
+        return;
+    }
+    host_status->slave_connect_sent = 1;
+
+    ACLK_HOSTLIST_UNLOCK;
+}
+
+static inline int aclk_hostlist_check_metdata(RRDHOST *host)
+{
+    int ret;
+    ACLK_HOSTLIST_LOCK;
+
+    struct _aclk_host_status *host_status = _aclk_hostlist_find(host);
+    if (!host_status) {
+        error("Unknown host %s", host->machine_guid);
+        return 0;
+    }
+    ret = host_status->slave_connect_sent;
+
+    ACLK_HOSTLIST_UNLOCK;
+    return ret;
+}
+
+/*
  * Free a collector structure
  */
 
@@ -677,10 +883,8 @@ void aclk_add_collector(RRDHOST *host, const char *plugin_name, const char *modu
     if (unlikely(tmp_collector->count != 1))
         goto cleanup;
 
-    if (unlikely(agent_state == AGENT_INITIALIZING)) {
-        last_init_sequence = now_realtime_sec();
+    if (aclk_popcorn_bump(host))
         goto cleanup;
-    }
 
     if (unlikely(aclk_queue_query("collector", host->machine_guid, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT)))
             debug(D_ACLK, "ACLK failed to queue on_connect command on collector addition");
@@ -718,10 +922,8 @@ void aclk_del_collector(RRDHOST *host, const char *plugin_name, const char *modu
 
     COLLECTOR_UNLOCK;
 
-    if (unlikely(agent_state == AGENT_INITIALIZING)) {
-        last_init_sequence = now_realtime_sec();
+    if (aclk_popcorn_bump(host))
         return;
-    }
 
     if (unlikely(aclk_queue_query("collector", host->machine_guid, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT)))
         debug(D_ACLK, "ACLK failed to queue on_connect command on collector deletion");
@@ -904,10 +1106,10 @@ int aclk_process_query()
                     error("Couldn't find host with guid \"%s\".", this_query->data);
                     break;
                 }
-                aclk_send_info_metadata_host(host);
+                aclk_send_info_metadata(host);
                 break;
             }
-            aclk_send_metadata();
+            aclk_send_metadata(localhost);
             aclk_metadata_submitted = ACLK_METADATA_SENT;
             break;
 
@@ -925,7 +1127,7 @@ int aclk_process_query()
                 break;
             }
             //TODO: This send the info metadata for now
-            aclk_send_info_metadata_host(host);
+            aclk_send_info_metadata(host);
             break;
 
         case ACLK_CMD_ALARM:
@@ -948,9 +1150,10 @@ int aclk_process_query()
                 break;
             }
 
-            if(this_query->cmd == ACLK_CMD_NEWSLAVE)
-                aclk_send_info_metadata_host(host);
-            else
+            if(this_query->cmd == ACLK_CMD_NEWSLAVE) {
+                aclk_send_metadata(host);
+                aclk_hostlist_metadata_sent(host);
+            } else
                 aclk_send_info_slave_disconnect(host);
 
             break;
@@ -1053,6 +1256,8 @@ void *aclk_query_main_thread(void *ptr)
             }
         }
 
+        aclk_hostlist_handle_popcorning();
+
         aclk_process_queries();
 
         QUERY_THREAD_LOCK;
@@ -1109,6 +1314,7 @@ static void aclk_main_cleanup(void *ptr)
         }
     }
 
+    aclk_hostlist_cleanup();
 
     static_thread->enabled = NETDATA_MAIN_THREAD_EXITED;
 }
@@ -1715,7 +1921,7 @@ inline void aclk_create_header(BUFFER *dest, char *type, char *msg_id, time_t ts
  *    active alarms
  */
 void health_active_log_alarms_2json(RRDHOST *host, BUFFER *wb);
-void aclk_send_alarm_metadata()
+void aclk_send_alarm_metadata(RRDHOST *host)
 {
     BUFFER *local_buffer = buffer_create(NETDATA_WEB_RESPONSE_INITIAL_SIZE);
 
@@ -1737,13 +1943,13 @@ void aclk_send_alarm_metadata()
 
 
     buffer_sprintf(local_buffer, "{\n\t \"configured-alarms\" : ");
-    health_alarms2json(localhost, local_buffer, 1);
+    health_alarms2json(host, local_buffer, 1);
     debug(D_ACLK, "Metadata %s with configured alarms has %zu bytes", msg_id, local_buffer->len);
     //    buffer_sprintf(local_buffer, ",\n\t \"alarm-log\" : ");
     //   health_alarm_log2json(localhost, local_buffer, 0);
     //   debug(D_ACLK, "Metadata %s with alarm_log has %zu bytes", msg_id, local_buffer->len);
     buffer_sprintf(local_buffer, ",\n\t \"alarms-active\" : ");
-    health_active_log_alarms_2json(localhost, local_buffer);
+    health_active_log_alarms_2json(host, local_buffer);
     //debug(D_ACLK, "Metadata message %s", local_buffer->buffer);
 
 
@@ -1755,17 +1961,12 @@ void aclk_send_alarm_metadata()
     buffer_free(local_buffer);
 }
 
-static char *metadata_msgtypes[][2] = {
-    { "connect", "update" },
-    { "slave-connect", "slave-update" }
-};
-
 /*
- * This will send the agent metadata for single RRDHOST
+ * This will send the agent metadata for RRDHOST
  *    /api/v1/info
  *    charts
  */
-int aclk_send_info_metadata_host(RRDHOST *host)
+int aclk_send_info_metadata(RRDHOST *host)
 {
     BUFFER *local_buffer = buffer_create(NETDATA_WEB_RESPONSE_INITIAL_SIZE);
 
@@ -1779,10 +1980,15 @@ int aclk_send_info_metadata_host(RRDHOST *host)
     // use the session time as the fake timestamp to indicate that it starts the session. If it is
     // a fake on_connect message then use the real timestamp to indicate it is within the existing
     // session.
-    if (aclk_metadata_submitted == ACLK_METADATA_SENT)
-        aclk_create_header(local_buffer, metadata_msgtypes[(host != localhost)][1], msg_id, 0, 0, host->machine_guid); //update
-    else
-        aclk_create_header(local_buffer, metadata_msgtypes[(host != localhost)][0], msg_id, aclk_session_sec, aclk_session_us, host->machine_guid); //connect
+
+    if(host == localhost) {
+        if(aclk_metadata_submitted == ACLK_METADATA_SENT)
+            aclk_create_header(local_buffer, "update", msg_id, 0, 0, host->machine_guid);
+        else
+            aclk_create_header(local_buffer, "connect", msg_id, aclk_session_sec, aclk_session_us, host->machine_guid);
+    } else
+        aclk_create_header(local_buffer, aclk_hostlist_check_metdata(host) ? "slave-update" : "slave-connect", msg_id, 0, 0, host->machine_guid);
+
     buffer_strcat(local_buffer, ",\n\t\"payload\": ");
 
     buffer_sprintf(local_buffer, "{\n\t \"info\" : ");
@@ -1798,22 +2004,6 @@ int aclk_send_info_metadata_host(RRDHOST *host)
 
     freez(msg_id);
     buffer_free(local_buffer);
-    return 0;
-}
-
-/*
- * This will send the agent metadata for all RRDHOSTs
- *    /api/v1/info
- *    charts
- */
-int aclk_send_info_metadata()
-{
-    RRDHOST *rc;
-    rrd_rdlock();
-    rrdhost_foreach_read(rc)
-        aclk_send_info_metadata_host(rc);
-
-    rrd_unlock();
     return 0;
 }
 
@@ -1862,11 +2052,10 @@ void aclk_send_stress_test(size_t size)
 
 // Send info metadata message to the cloud if the link is established
 // or on request
-int aclk_send_metadata()
+int aclk_send_metadata(RRDHOST *host)
 {
-
-    aclk_send_info_metadata();
-    aclk_send_alarm_metadata();
+    aclk_send_info_metadata(host);
+    aclk_send_alarm_metadata(host);
 
     return 0;
 }
@@ -1950,10 +2139,8 @@ int aclk_update_chart(RRDHOST *host, char *chart_name, ACLK_CMD aclk_cmd)
     if (unlikely(aclk_disable_single_updates))
         return 0;
 
-    if (unlikely(agent_state == AGENT_INITIALIZING)) {
-        last_init_sequence = now_realtime_sec();
+    if (aclk_popcorn_bump(host))
         return 0;
-    }
 
     if (unlikely(aclk_queue_query("_chart", host->machine_guid, NULL, chart_name, 0, 1, aclk_cmd))) {
         if (likely(aclk_connected)) {
@@ -1969,7 +2156,7 @@ int aclk_update_alarm(RRDHOST *host, ALARM_ENTRY *ae)
 {
     BUFFER *local_buffer = NULL;
 
-    if (unlikely(agent_state == AGENT_INITIALIZING))
+    if (aclk_is_host_initializing(host))
         return 0;
 
     /*
@@ -2072,13 +2259,10 @@ int aclk_handle_cloud_request(char *payload)
 
 void aclk_host_state_update(RRDHOST *host, ACLK_CMD cmd)
 {
-    if (aclk_metadata_submitted != ACLK_METADATA_SENT)
-        return;
-
     switch (cmd) {
         case ACLK_CMD_NEWSLAVE:
             debug(D_ACLK, "New slave %s %s.", host->hostname, host->machine_guid);
-            aclk_queue_query("new_slave", host->machine_guid, NULL, NULL, 0, 1, ACLK_CMD_NEWSLAVE);
+            aclk_hostlist_add(host);
             break;
         case ACLK_CMD_DELSLAVE:
             debug(D_ACLK, "Slave disconnect %s %s.", host->hostname, host->machine_guid);

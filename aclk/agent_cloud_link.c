@@ -1969,9 +1969,6 @@ int aclk_update_alarm(RRDHOST *host, ALARM_ENTRY *ae)
 {
     BUFFER *local_buffer = NULL;
 
-    if (host != localhost)
-        return 0;
-
     if (unlikely(agent_state == AGENT_INITIALIZING))
         return 0;
 
@@ -1989,7 +1986,7 @@ int aclk_update_alarm(RRDHOST *host, ALARM_ENTRY *ae)
     char *msg_id = create_uuid();
 
     buffer_flush(local_buffer);
-    aclk_create_header(local_buffer, "status-change", msg_id, 0, 0, NULL);
+    aclk_create_header(local_buffer, "status-change", msg_id, 0, 0, host->machine_guid);
     buffer_strcat(local_buffer, ",\n\t\"payload\": ");
 
     netdata_rwlock_rdlock(&host->health_log.alarm_log_rwlock);

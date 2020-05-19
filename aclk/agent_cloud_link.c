@@ -770,61 +770,99 @@ static char *aclk_encode_response(char *src, size_t content_size, int keep_newli
     return tmp_buffer;
 }
 
+#define SLAVE_QUERY "/host/"
+static inline int _aclk_is_slave_query(char *query)
+{
+    return (strncmp(query, SLAVE_QUERY, strlen(SLAVE_QUERY)) == 0);
+}
+
 int aclk_execute_query(struct aclk_query *this_query)
 {
-    if (strncmp(this_query->query, "/api/v1/", 8) == 0) {
-        struct web_client *w = (struct web_client *)callocz(1, sizeof(struct web_client));
-        w->response.data = buffer_create(NETDATA_WEB_RESPONSE_INITIAL_SIZE);
-        w->response.header = buffer_create(NETDATA_WEB_RESPONSE_HEADER_SIZE);
-        w->response.header_output = buffer_create(NETDATA_WEB_RESPONSE_HEADER_SIZE);
-        strcpy(w->origin, "*"); // Simulate web_client_create_on_fd()
-        w->cookie1[0] = 0;      // Simulate web_client_create_on_fd()
-        w->cookie2[0] = 0;      // Simulate web_client_create_on_fd()
-        w->acl = 0x1f;
+    RRDHOST *queried_host = localhost;
+    char *query_api = strstr(this_query->query, "/api/v1/");
+    char host_guid[UUID_STR_LEN];
 
-        char *mysep = strchr(this_query->query, '?');
-        if (mysep) {
-            strncpyz(w->decoded_query_string, mysep, NETDATA_WEB_REQUEST_URL_SIZE);
-            *mysep = '\0';
-        } else
-            strncpyz(w->decoded_query_string, this_query->query, NETDATA_WEB_REQUEST_URL_SIZE);
-
-        mysep = strrchr(this_query->query, '/');
-
-        // TODO: handle bad response perhaps in a different way. For now it does to the payload
-        w->response.code = web_client_api_request_v1(localhost, w, mysep ? mysep + 1 : "noop");
-        now_realtime_timeval(&w->tv_ready);
-        w->response.data->date = w->tv_ready.tv_sec;
-        web_client_build_http_header(w);  // TODO: this function should offset from date, not tv_ready
-        BUFFER *local_buffer = buffer_create(NETDATA_WEB_RESPONSE_INITIAL_SIZE);
-        buffer_flush(local_buffer);
-        local_buffer->contenttype = CT_APPLICATION_JSON;
-
-        aclk_create_header(local_buffer, "http", this_query->msg_id, 0, 0, NULL); //TODO:timo,abe16820-712a-4701-a35d-84db7b3bccbb
-        buffer_strcat(local_buffer, ",\n\t\"payload\": ");
-        char *encoded_response = aclk_encode_response(w->response.data->buffer, w->response.data->len, 0);
-        char *encoded_header = aclk_encode_response(w->response.header_output->buffer, w->response.header_output->len, 1);
-
-        buffer_sprintf(
-            local_buffer, "{\n\"code\": %d,\n\"body\": \"%s\",\n\"headers\": \"%s\"\n}", 
-            w->response.code, encoded_response, encoded_header);
-
-        buffer_sprintf(local_buffer, "\n}");
-
-        debug(D_ACLK, "Response:%s", encoded_header);
-
-        aclk_send_message(this_query->topic, local_buffer->buffer, this_query->msg_id);
-
-        buffer_free(w->response.data);
-        buffer_free(w->response.header);
-        buffer_free(w->response.header_output);
-        freez(w);
-        buffer_free(local_buffer);
-        freez(encoded_response);
-        freez(encoded_header);
-        return 0;
+    if (!query_api) {
+        error("Query doens't contain \"/api/v1/\"");
+        return 1;
     }
-    return 1;
+
+    if (query_api != this_query->query) {
+        // if query doesn't start by /api/v1/ we try find
+        // /host/ to see if we query some slave
+        if (!_aclk_is_slave_query(this_query->query)) {
+            error("Unknown query, Slave guid expected");
+            return 1;
+        }
+
+        //we expect /host/UUID/api/v1/...
+        // UUID is of fixed size a865e68b-d64b-4bb1-a807-d2261fee01a7 36 chars
+        if (query_api - (this_query->query + strlen(SLAVE_QUERY)) != UUID_STR_LEN - 1) {
+            error("Host uuid is of wrong size.");
+            return 1;
+        }
+
+        memset(host_guid, 0, UUID_STR_LEN);
+        strncpy(host_guid, this_query->query + strlen(SLAVE_QUERY), UUID_STR_LEN - 1);
+
+        queried_host = rrdhost_find_by_guid(host_guid, 0);
+        if (!queried_host) {
+            error("Unkown host queried \"%s\".", host_guid);
+            return 1;
+        }
+    }
+
+    struct web_client *w = (struct web_client *)callocz(1, sizeof(struct web_client));
+    w->response.data = buffer_create(NETDATA_WEB_RESPONSE_INITIAL_SIZE);
+    w->response.header = buffer_create(NETDATA_WEB_RESPONSE_HEADER_SIZE);
+    w->response.header_output = buffer_create(NETDATA_WEB_RESPONSE_HEADER_SIZE);
+    strcpy(w->origin, "*"); // Simulate web_client_create_on_fd()
+    w->cookie1[0] = 0;      // Simulate web_client_create_on_fd()
+    w->cookie2[0] = 0;      // Simulate web_client_create_on_fd()
+    w->acl = 0x1f;
+
+    char *mysep = strchr(query_api, '?');
+    if (mysep) {
+        strncpyz(w->decoded_query_string, mysep, NETDATA_WEB_REQUEST_URL_SIZE);
+        *mysep = '\0';
+    } else
+        strncpyz(w->decoded_query_string, query_api, NETDATA_WEB_REQUEST_URL_SIZE);
+
+    mysep = strrchr(query_api, '/');
+
+    // TODO: handle bad response perhaps in a different way. For now it does to the payload
+    w->response.code = web_client_api_request_v1(queried_host, w, mysep ? mysep + 1 : "noop");
+    now_realtime_timeval(&w->tv_ready);
+    w->response.data->date = w->tv_ready.tv_sec;
+    web_client_build_http_header(w); // TODO: this function should offset from date, not tv_ready
+    BUFFER *local_buffer = buffer_create(NETDATA_WEB_RESPONSE_INITIAL_SIZE);
+    buffer_flush(local_buffer);
+    local_buffer->contenttype = CT_APPLICATION_JSON;
+
+    aclk_create_header(local_buffer, "http", this_query->msg_id, 0, 0, queried_host->machine_guid);
+
+    buffer_strcat(local_buffer, ",\n\t\"payload\": ");
+    char *encoded_response = aclk_encode_response(w->response.data->buffer, w->response.data->len, 0);
+    char *encoded_header = aclk_encode_response(w->response.header_output->buffer, w->response.header_output->len, 1);
+
+    buffer_sprintf(
+        local_buffer, "{\n\"code\": %d,\n\"body\": \"%s\",\n\"headers\": \"%s\"\n}", w->response.code, encoded_response,
+        encoded_header);
+
+    buffer_sprintf(local_buffer, "\n}");
+
+    debug(D_ACLK, "Response:%s", encoded_header);
+
+    aclk_send_message(this_query->topic, local_buffer->buffer, this_query->msg_id);
+
+    buffer_free(w->response.data);
+    buffer_free(w->response.header);
+    buffer_free(w->response.header_output);
+    freez(w);
+    buffer_free(local_buffer);
+    freez(encoded_response);
+    freez(encoded_header);
+    return 0;
 }
 
 /*

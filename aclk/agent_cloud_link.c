@@ -674,18 +674,18 @@ void aclk_add_collector(const char *hostname, const char *plugin_name, const cha
 
     tmp_collector = _add_collector(hostname, plugin_name, module_name);
 
-    if (unlikely(tmp_collector->count != 1)) {
-        COLLECTOR_UNLOCK;
-        return;
-    }
+    if (unlikely(tmp_collector->count != 1))
+        goto cleanup;
 
-    if (unlikely(agent_state == AGENT_INITIALIZING))
+    if (unlikely(agent_state == AGENT_INITIALIZING)) {
         last_init_sequence = now_realtime_sec();
-    else {
-        if (unlikely(aclk_queue_query("collector", NULL, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT)))
-            debug(D_ACLK, "ACLK failed to queue on_connect command on collector addition");
+        goto cleanup;
     }
 
+    if (unlikely(aclk_queue_query("collector", NULL, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT)))
+            debug(D_ACLK, "ACLK failed to queue on_connect command on collector addition");
+
+cleanup:
     COLLECTOR_UNLOCK;
 }
 
@@ -714,17 +714,17 @@ void aclk_del_collector(const char *hostname, const char *plugin_name, const cha
         D_ACLK, "DEL COLLECTOR [%s:%s] -- charts %u", plugin_name ? plugin_name : "*", module_name ? module_name : "*",
         tmp_collector->count);
 
-    COLLECTOR_UNLOCK;
-
-    if (unlikely(agent_state == AGENT_INITIALIZING))
-        last_init_sequence = now_realtime_sec();
-    else {
-        if (unlikely(aclk_queue_query("collector", NULL, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT)))
-            debug(D_ACLK, "ACLK failed to queue on_connect command on collector deletion");
-    }
-
     _free_collector(tmp_collector);
 
+    COLLECTOR_UNLOCK;
+
+    if (unlikely(agent_state == AGENT_INITIALIZING)) {
+        last_init_sequence = now_realtime_sec();
+        return;
+    }
+
+    if (unlikely(aclk_queue_query("collector", NULL, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT)))
+        debug(D_ACLK, "ACLK failed to queue on_connect command on collector deletion");
 }
 /*
  * Take a buffer, encode it and rewrite it
@@ -1940,14 +1940,15 @@ int aclk_update_chart(RRDHOST *host, char *chart_name, ACLK_CMD aclk_cmd)
     if (unlikely(aclk_disable_single_updates))
         return 0;
 
-    if (unlikely(agent_state == AGENT_INITIALIZING))
+    if (unlikely(agent_state == AGENT_INITIALIZING)) {
         last_init_sequence = now_realtime_sec();
-    else {
-        if (unlikely(aclk_queue_query("_chart", host->machine_guid, NULL, chart_name, 0, 1, aclk_cmd))) {
-            if (likely(aclk_connected)) {
-                errno = 0;
-                error("ACLK failed to queue chart_update command");
-            }
+        return 0;
+    }
+
+    if (unlikely(aclk_queue_query("_chart", host->machine_guid, NULL, chart_name, 0, 1, aclk_cmd))) {
+        if (likely(aclk_connected)) {
+            errno = 0;
+            error("ACLK failed to queue chart_update command");
         }
     }
     return 0;

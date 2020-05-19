@@ -666,13 +666,13 @@ static struct _collector *_add_collector(const char *hostname, const char *plugi
  * Add a new collector to the list
  * If it exists, update the chart count
  */
-void aclk_add_collector(const char *hostname, const char *plugin_name, const char *module_name)
+void aclk_add_collector(RRDHOST *host, const char *plugin_name, const char *module_name)
 {
     struct _collector *tmp_collector;
 
     COLLECTOR_LOCK;
 
-    tmp_collector = _add_collector(hostname, plugin_name, module_name);
+    tmp_collector = _add_collector(host->hostname, plugin_name, module_name);
 
     if (unlikely(tmp_collector->count != 1))
         goto cleanup;
@@ -682,7 +682,7 @@ void aclk_add_collector(const char *hostname, const char *plugin_name, const cha
         goto cleanup;
     }
 
-    if (unlikely(aclk_queue_query("collector", NULL, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT)))
+    if (unlikely(aclk_queue_query("collector", host->machine_guid, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT)))
             debug(D_ACLK, "ACLK failed to queue on_connect command on collector addition");
 
 cleanup:
@@ -697,13 +697,13 @@ cleanup:
  * This function will release the memory used and schedule
  * a cloud update
  */
-void aclk_del_collector(const char *hostname, const char *plugin_name, const char *module_name)
+void aclk_del_collector(RRDHOST *host, const char *plugin_name, const char *module_name)
 {
     struct _collector *tmp_collector;
 
     COLLECTOR_LOCK;
 
-    tmp_collector = _del_collector(hostname, plugin_name, module_name);
+    tmp_collector = _del_collector(host->hostname, plugin_name, module_name);
 
     if (unlikely(!tmp_collector || tmp_collector->count)) {
         COLLECTOR_UNLOCK;
@@ -723,7 +723,7 @@ void aclk_del_collector(const char *hostname, const char *plugin_name, const cha
         return;
     }
 
-    if (unlikely(aclk_queue_query("collector", NULL, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT)))
+    if (unlikely(aclk_queue_query("collector", host->machine_guid, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT)))
         debug(D_ACLK, "ACLK failed to queue on_connect command on collector deletion");
 }
 /*
@@ -897,6 +897,16 @@ int aclk_process_query()
     switch (this_query->cmd) {
         case ACLK_CMD_ONCONNECT:
             debug(D_ACLK, "EXECUTING on connect metadata command");
+            if(this_query->data) {
+                host = rrdhost_find_by_guid(this_query->data, 0);
+                if(!host) {
+                    errno = 0;
+                    error("Couldn't find host with guid \"%s\".", this_query->data);
+                    break;
+                }
+                aclk_send_info_metadata_host(host);
+                break;
+            }
             aclk_send_metadata();
             aclk_metadata_submitted = ACLK_METADATA_SENT;
             break;

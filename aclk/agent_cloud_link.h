@@ -47,7 +47,8 @@ typedef enum aclk_cmd {
     ACLK_CMD_MAX,
     ACLK_CMD_NEWSLAVE,
     ACLK_CMD_DELSLAVE,
-    ACLK_CMD_PUSH_UPDATE
+    ACLK_CMD_PUSH_UPDATE,
+    ACLK_CMD_HEALTH_UPDATE
 } ACLK_CMD;
 
 typedef enum aclk_metadata_state {
@@ -58,7 +59,8 @@ typedef enum aclk_metadata_state {
 
 typedef enum agent_state {
     AGENT_INITIALIZING,
-    AGENT_STABLE
+    AGENT_STABLE,
+    AGENT_WAIT_HEALTH_INIT
 } AGENT_STATE;
 
 typedef enum aclk_init_action { ACLK_INIT, ACLK_REINIT } ACLK_INIT_ACTION;

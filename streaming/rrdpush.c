@@ -1283,14 +1283,6 @@ static int rrdpush_receive(int fd
     host->senders_disconnected_time = 0;
     host->labels_flag = (stream_version > 0)?LABEL_FLAG_UPDATE_STREAM:LABEL_FLAG_STOP_STREAM;
 
-#ifdef ENABLE_ACLK
-    // in case we have cloud connection we inform cloud
-    // new slave connected
-    // call this after updating host->connected_senders
-    if (netdata_cloud_setting)
-        aclk_host_state_update(host, ACLK_CMD_NEWSLAVE);
-#endif
-
     if(health_enabled != CONFIG_BOOLEAN_NO) {
         if(alarms_delay > 0) {
             host->health_delay_up_to = now_realtime_sec() + alarms_delay;
@@ -1300,6 +1292,15 @@ static int rrdpush_receive(int fd
             );
         }
     }
+
+#ifdef ENABLE_ACLK
+    // in case we have cloud connection we inform cloud
+    // new slave connected
+    // call this after updating host->connected_senders
+    if (netdata_cloud_setting)
+        aclk_host_state_update(host, ACLK_CMD_NEWSLAVE);
+#endif
+
     rrdhost_unlock(host);
 
     // call the plugins.d processor to receive the metrics

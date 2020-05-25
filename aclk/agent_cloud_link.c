@@ -78,7 +78,9 @@ struct _aclk_host_status {
     char *guid;
     uint32_t guid_hash;
     AGENT_STATE state;
+    AGENT_STATE health_state;
     int slave_connect_sent;
+    time_t health_delay_up_to;
 
     // popcorn timing stuff
     time_t timestamp_created;
@@ -568,6 +570,10 @@ static void aclk_hostlist_add(RRDHOST *host)
     }
 
     new->state = AGENT_INITIALIZING;
+
+    new->health_delay_up_to = host->health_delay_up_to;
+    new->health_state = new->health_delay_up_to ? AGENT_WAIT_HEALTH_INIT : AGENT_STABLE;
+
     new->timestamp_last_update = now;
     ACLK_HOSTLIST_UNLOCK;
 }
@@ -602,6 +608,19 @@ void aclk_hostlist_handle_popcorning()
             } else
                 info("Waiting for streaming slave \"%s\" to stabilize. Passed %ld", host->guid, t_passed);
         }
+        if (host->health_state == AGENT_WAIT_HEALTH_INIT && now_realtime_sec() >= host->health_delay_up_to) {
+            host->health_state = AGENT_INITIALIZING;
+            host->timestamp_last_update = now_monotonic_sec();
+            t_passed = 0;
+        }
+        if (host->health_state == AGENT_INITIALIZING) {
+            if (t_passed > ACLK_STABLE_TIMEOUT) {
+                host->health_state = AGENT_STABLE;
+                aclk_queue_query("health_update_slave", host->guid, NULL, NULL, 0, 1, ACLK_CMD_HEALTH_UPDATE);
+                info("STABLE streaming slave \"%s\" health sending data co cloud.", host->guid);
+            } else
+                info("Waiting for streaming slave \"%s\" health to stabilize. Passed %ld", host->guid, t_passed);
+        }
         host = host->next;
     }
     ACLK_HOSTLIST_UNLOCK;
@@ -613,7 +632,7 @@ int aclk_hostlist_popcorning_extend(RRDHOST *host)
     ACLK_HOSTLIST_LOCK;
     struct _aclk_host_status *status = _aclk_hostlist_find(host);
 
-    if (status && status->state == AGENT_INITIALIZING) {
+    if (status && (status->state == AGENT_INITIALIZING || status->health_state == AGENT_INITIALIZING)) {
         status->timestamp_last_update = now_monotonic_sec();
         ret = 1;
     }
@@ -1161,6 +1180,18 @@ int aclk_process_query()
         case ACLK_CMD_PUSH_UPDATE:
             debug(D_ACLK, "EXECUTING push_update");
             aclk_send_rrdpush_update();
+            break;
+
+        case ACLK_CMD_HEALTH_UPDATE:
+            //debug(D_ACLK, "EXECUTING health update command");
+            error("ACLK EXECUTING health update command");
+            host = rrdhost_find_by_guid(this_query->data, 0);
+            if(!host) {
+                errno = 0;
+                error("Couldn't find host with guid \"%s\".", this_query->data);
+                break;
+            }
+            aclk_send_alarm_metadata(host);
             break;
 
         default:
@@ -2155,9 +2186,23 @@ int aclk_update_chart(RRDHOST *host, char *chart_name, ACLK_CMD aclk_cmd)
 int aclk_update_alarm(RRDHOST *host, ALARM_ENTRY *ae)
 {
     BUFFER *local_buffer = NULL;
+    struct _aclk_host_status *status;
 
     if (aclk_is_host_initializing(host))
         return 0;
+
+    // second popcoring due to the health init delay of slave agents
+    if (host != localhost) {
+        status = _aclk_hostlist_find(host);
+        
+        if (unlikely(status && status->health_state == AGENT_INITIALIZING)) {
+            if(aclk_hostlist_popcorning_extend(host)) {
+                return 0;
+            }
+        }
+        if (status->health_state != AGENT_STABLE)
+            return 0;
+    }
 
     /*
      * Check if individual updates have been disabled

@@ -1214,13 +1214,13 @@ inline void aclk_create_header(BUFFER *dest, char *type, char *msg_id, time_t ts
 
     buffer_sprintf(
         dest,
-        "{\t\"type\": \"%s\",\n"
-        "\t\"msg-id\": \"%s\",\n"
-        "\t\"timestamp\": %ld,\n"
-        "\t\"timestamp-offset-usec\": %llu,\n"
-        "\t\"connect\": %ld,\n"
-        "\t\"connect-offset-usec\": %llu,\n"
-        "\t\"version\": %d",
+        "{\"type\":\"%s\","
+        "\"msg-id\":\"%s\","
+        "\"timestamp\":%ld,"
+        "\"timestamp-offset-usec\":%llu,"
+        "\"connect\":%ld,"
+        "\"connect-offset-usec\":%llu,"
+        "\"version\":%d",
         type, msg_id, ts_secs, ts_us, aclk_session_sec, aclk_session_us, version);
 
     debug(D_ACLK, "Sending v%d msgid [%s] type [%s] time [%ld]", version, msg_id, type, ts_secs);

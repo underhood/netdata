@@ -1235,6 +1235,26 @@ inline void aclk_create_header(BUFFER *dest, char *type, char *msg_id, time_t ts
  */
 void health_active_log_alarms_2json(RRDHOST *host, BUFFER *wb);
 
+/*
+ * As we use web API that returns already formated JSON string
+ * we have to awkwardly parse and generate the json here.
+ * This will be removed later as we make web API use JSON-C
+ */
+int aclk_minify_json(BUFFER *buf)
+{
+    json_object *json = json_tokener_parse(buf->buffer);
+    if(unlikely(!json)) {
+        error("Failed to parse the JSON");
+        return 1;
+    }
+
+    buffer_flush(buf);
+    buffer_strcat(buf, json_object_to_json_string_ext(json, 0));
+
+    json_object_put(json);
+    return 0;
+}
+
 void aclk_send_alarm_metadata(ACLK_METADATA_STATE metadata_submitted)
 {
     BUFFER *local_buffer = buffer_create(NETDATA_WEB_RESPONSE_INITIAL_SIZE);

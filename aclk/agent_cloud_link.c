@@ -1287,10 +1287,10 @@ void aclk_send_alarm_metadata(ACLK_METADATA_STATE metadata_submitted)
     health_active_log_alarms_2json(localhost, local_buffer);
     //debug(D_ACLK, "Metadata message %s", local_buffer->buffer);
 
-
-
     buffer_sprintf(local_buffer, "\n}\n}");
-    aclk_send_message(ACLK_ALARMS_TOPIC, local_buffer->buffer, msg_id);
+
+    if(!aclk_minify_json(local_buffer))
+        aclk_send_message(ACLK_ALARMS_TOPIC, local_buffer->buffer, msg_id);
 
     freez(msg_id);
     buffer_free(local_buffer);
@@ -1330,7 +1330,8 @@ int aclk_send_info_metadata(ACLK_METADATA_STATE metadata_submitted)
     buffer_sprintf(local_buffer, "\n}\n}");
     debug(D_ACLK, "Metadata %s with chart has %zu bytes", msg_id, local_buffer->len);
 
-    aclk_send_message(ACLK_METADATA_TOPIC, local_buffer->buffer, msg_id);
+    if(!aclk_minify_json(local_buffer))
+        aclk_send_message(ACLK_METADATA_TOPIC, local_buffer->buffer, msg_id);
 
     freez(msg_id);
     buffer_free(local_buffer);

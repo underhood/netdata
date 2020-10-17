@@ -623,85 +623,97 @@ AM_CONDITIONAL([ENABLE_CAPABILITY], [test "${with_libcap}" = "yes"])
 
 AC_MSG_CHECKING([if cloud functionality should be enabled])
 AC_MSG_RESULT([${enable_cloud}])
-if test "$enable_cloud" != "no"; then
-    # just to have all messages that can fail ACLK build in one place
-    # so it is easier to see why it can't be built
-    if test -n "${SSL_LIBS}"; then
-        OPTIONAL_SSL_CFLAGS="${SSL_CFLAGS}"
-        OPTIONAL_SSL_LIBS="${SSL_LIBS}"
-    else
-        AC_MSG_WARN([OpenSSL required for agent-cloud-link but not found. Try installing 'libssl-dev' or 'openssl-devel'.])
-    fi
-
-    AC_MSG_CHECKING([if libmosquitto static lib is present (and builds)])
-    if test -f "externaldeps/mosquitto/libmosquitto.a"; then
-        LIBS_BKP="${LIBS}"
-        LIBS="externaldeps/mosquitto/libmosquitto.a ${OPTIONAL_SSL_LIBS} ${LIBS_BKP}"
-        AC_LINK_IFELSE([AC_LANG_SOURCE([[#include "externaldeps/mosquitto/mosquitto.h"
-                                         int main (int argc, char **argv) {
-                                             int m,mm,r;
-                                             mosquitto_lib_version(&m, &mm, &r);
-                                         }]])],
-                                        [HAVE_libmosquitto_a="yes"],
-                                        [HAVE_libmosquitto_a="no"])
-        LIBS="${LIBS_BKP}"
-    else
-        HAVE_libmosquitto_a="no"
-        AC_DEFINE([ACLK_NO_LIBMOSQ], [1], [Libmosquitto.a was not found during build.])
-    fi
-    AC_MSG_RESULT([${HAVE_libmosquitto_a}])
-
-    AC_MSG_CHECKING([if libwebsockets static lib is present])
-    if test -f "externaldeps/libwebsockets/libwebsockets.a"; then
-        LWS_CFLAGS="-I externaldeps/libwebsockets/include"
-        HAVE_libwebsockets_a="yes"
-    else
-        HAVE_libwebsockets_a="no"
-        AC_DEFINE([ACLK_NO_LWS], [1], [libwebsockets.a was not found during build.])
-    fi
-    AC_MSG_RESULT([${HAVE_libwebsockets_a}])
-
-    if test "${build_target}" = "linux" -a "${enable_cloud}" != "no"; then
-        if test "${have_libcap}" = "yes" -a "${with_libcap}" = "no"; then
-            AC_MSG_ERROR([agent-cloud-link can't be built without libcap. Disable it by --disable-cloud or enable libcap])
-        fi
-        if test "${with_libcap}" = "yes"; then
-            LWS_CFLAGS+=" ${LIBCAP_CFLAGS}"
-        fi
-    fi
-
-    # next 2 lines are just to have info for ACLK dependencies in common place
-    AC_MSG_CHECKING([if json-c available for ACLK])
-    AC_MSG_RESULT([${enable_jsonc}])
-
-    test "${enable_cloud}" = "yes" -a "${enable_jsonc}" = "no" && \
-        AC_MSG_ERROR([You have asked for ACLK to be built but no json-c available. ACLK requires json-c])
-
-    AC_MSG_CHECKING([if netdata agent-cloud-link can be enabled])
-    if test "${HAVE_libmosquitto_a}" = "yes" -a "${HAVE_libwebsockets_a}" = "yes" -a -n "${SSL_LIBS}" -a "${enable_jsonc}" = "yes"; then
-        can_enable_aclk="yes"
-    else
-        can_enable_aclk="no"
-    fi
-    AC_MSG_RESULT([${can_enable_aclk}])
-
-    test "${enable_cloud}" = "yes" -a "${can_enable_aclk}" = "no" && \
-        AC_MSG_ERROR([User required agent-cloud-link but it can't be built!])
-
-    AC_MSG_CHECKING([if netdata agent-cloud-link should/will be enabled])
-    if test "${enable_cloud}" = "detect"; then
-        enable_aclk=$can_enable_aclk
-    else
-        enable_aclk=$enable_cloud
-    fi
-    AC_SUBST([can_enable_aclk])
-
-    if test "${enable_aclk}" = "yes"; then
-        AC_DEFINE([ENABLE_ACLK], [1], [netdata ACLK])
-    fi
-
-    AC_MSG_RESULT([${enable_aclk}])
+aclk_ng="yes"
+if test "${enable_cloud}" != "no"; then
+    echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXx"
+    AC_MSG_CHECKING([if ACLK Next Generation can be built])
+    AC_DEFINE([ACLK_NG], [1], [ACLK Next Generation Should be used])
+    AC_DEFINE([ENABLE_ACLK], [1], [netdata ACLK])
+    enable_aclk="yes"
+    AC_MSG_RESULT([yes])
+    OPTIONAL_MQTT_WSS_CFLAGS="-Imqtt_websockets/src/include"
 fi
+AM_CONDITIONAL([ACLK_NG], [test "${aclk_ng}" = "yes"])
+
+#if test "$enable_cloud" != "no" -a test "${aclk_ng}" = "no"; then
+#    # just to have all messages that can fail ACLK build in one place
+#    # so it is easier to see why it can't be built
+#    if test -n "${SSL_LIBS}"; then
+#        OPTIONAL_SSL_CFLAGS="${SSL_CFLAGS}"
+#        OPTIONAL_SSL_LIBS="${SSL_LIBS}"
+#    else
+#        AC_MSG_WARN([OpenSSL required for agent-cloud-link but not found. Try installing 'libssl-dev' or 'openssl-devel'.])
+#    fi
+#
+#    AC_MSG_CHECKING([if libmosquitto static lib is present (and builds)])
+#    if test -f "externaldeps/mosquitto/libmosquitto.a"; then
+#        LIBS_BKP="${LIBS}"
+#        LIBS="externaldeps/mosquitto/libmosquitto.a ${OPTIONAL_SSL_LIBS} ${LIBS_BKP}"
+#        AC_LINK_IFELSE([AC_LANG_SOURCE([[#include "externaldeps/mosquitto/mosquitto.h"
+#                                         int main (int argc, char **argv) {
+#                                             int m,mm,r;
+#                                             mosquitto_lib_version(&m, &mm, &r);
+#                                         }]])],
+#                                        [HAVE_libmosquitto_a="yes"],
+#                                        [HAVE_libmosquitto_a="no"])
+#        LIBS="${LIBS_BKP}"
+#    else
+#        HAVE_libmosquitto_a="no"
+#        AC_DEFINE([ACLK_NO_LIBMOSQ], [1], [Libmosquitto.a was not found during build.])
+#    fi
+#    AC_MSG_RESULT([${HAVE_libmosquitto_a}])
+#
+#    AC_MSG_CHECKING([if libwebsockets static lib is present])
+#    if test -f "externaldeps/libwebsockets/libwebsockets.a"; then
+#        LWS_CFLAGS="-I externaldeps/libwebsockets/include"
+#        HAVE_libwebsockets_a="yes"
+#    else
+#        HAVE_libwebsockets_a="no"
+#        AC_DEFINE([ACLK_NO_LWS], [1], [libwebsockets.a was not found during build.])
+#    fi
+#    AC_MSG_RESULT([${HAVE_libwebsockets_a}])
+#
+#    if test "${build_target}" = "linux" -a "${enable_cloud}" != "no"; then
+#        if test "${have_libcap}" = "yes" -a "${with_libcap}" = "no"; then
+#            AC_MSG_ERROR([agent-cloud-link can't be built without libcap. Disable it by --disable-cloud or enable libcap])
+#        fi
+#        if test "${with_libcap}" = "yes"; then
+#            LWS_CFLAGS+=" ${LIBCAP_CFLAGS}"
+#        fi
+#    fi
+#
+#    # next 2 lines are just to have info for ACLK dependencies in common place
+#    AC_MSG_CHECKING([if json-c available for ACLK])
+#    AC_MSG_RESULT([${enable_jsonc}])
+#
+#    test "${enable_cloud}" = "yes" -a "${enable_jsonc}" = "no" && \
+#        AC_MSG_ERROR([You have asked for ACLK to be built but no json-c available. ACLK requires json-c])
+#
+#    AC_MSG_CHECKING([if netdata agent-cloud-link can be enabled])
+#    if test "${HAVE_libmosquitto_a}" = "yes" -a "${HAVE_libwebsockets_a}" = "yes" -a -n "${SSL_LIBS}" -a "${enable_jsonc}" = "yes"; then
+#        can_enable_aclk="yes"
+#    else
+#        can_enable_aclk="no"
+#    fi
+#    AC_MSG_RESULT([${can_enable_aclk}])
+#
+#    test "${enable_cloud}" = "yes" -a "${can_enable_aclk}" = "no" && \
+#        AC_MSG_ERROR([User required agent-cloud-link but it can't be built!])
+#
+#    AC_MSG_CHECKING([if netdata agent-cloud-link should/will be enabled])
+#    if test "${enable_cloud}" = "detect"; then
+#        enable_aclk=$can_enable_aclk
+#    else
+#        enable_aclk=$enable_cloud
+#    fi
+#    AC_SUBST([can_enable_aclk])
+#
+#    if test "${enable_aclk}" = "yes"; then
+#        AC_DEFINE([ENABLE_ACLK], [1], [netdata ACLK])
+#    fi
+#
+#    AC_MSG_RESULT([${enable_aclk}])
+#fi
 AC_SUBST([enable_cloud])
 AM_CONDITIONAL([ENABLE_ACLK], [test "${enable_aclk}" = "yes"])
 
@@ -1403,7 +1415,8 @@ AC_SUBST([webdir])
 CFLAGS="${CFLAGS} ${OPTIONAL_MATH_CFLAGS} ${OPTIONAL_NFACCT_CFLAGS} ${OPTIONAL_ZLIB_CFLAGS} ${OPTIONAL_UUID_CFLAGS} \
     ${OPTIONAL_LIBCAP_CFLAGS} ${OPTIONAL_IPMIMONITORING_CFLAGS} ${OPTIONAL_CUPS_CFLAGS} ${OPTIONAL_XENSTAT_FLAGS} \
     ${OPTIONAL_KINESIS_CFLAGS} ${OPTIONAL_PUBSUB_CFLAGS} ${OPTIONAL_PROMETHEUS_REMOTE_WRITE_CFLAGS} \
-    ${OPTIONAL_MONGOC_CFLAGS} ${LWS_CFLAGS} ${OPTIONAL_JSONC_STATIC_CFLAGS} ${OPTIONAL_BPF_CFLAGS} ${OPTIONAL_JUDY_CFLAGS}"
+    ${OPTIONAL_MONGOC_CFLAGS} ${LWS_CFLAGS} ${OPTIONAL_JSONC_STATIC_CFLAGS} ${OPTIONAL_BPF_CFLAGS} ${OPTIONAL_JUDY_CFLAGS} \
+    ${OPTIONAL_MQTT_WSS_CFLAGS}"
 
 CXXFLAGS="${CFLAGS} ${CXX11FLAG}"
 
@@ -1452,6 +1465,7 @@ AC_SUBST([OPTIONAL_PROMETHEUS_REMOTE_WRITE_CFLAGS])
 AC_SUBST([OPTIONAL_PROMETHEUS_REMOTE_WRITE_LIBS])
 AC_SUBST([OPTIONAL_MONGOC_CFLAGS])
 AC_SUBST([OPTIONAL_MONGOC_LIBS])
+AC_SUBST([OPTIONAL_MQTT_WSS_CFLAGS])
 
 # -----------------------------------------------------------------------------
 # Check if cmocka is available - needed for unit testing
@@ -1594,10 +1608,17 @@ AC_CONFIG_FILES([
     web/server/Makefile
     web/server/static/Makefile
     claim/Makefile
-    aclk/legacy/Makefile
     spawn/Makefile
     parser/Makefile
 ])
+
+if test "${aclk_ng}" = "no"; then
+echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXxx"
+AC_CONFIG_FILES([
+    aclk/legacy/Makefile
+])
+fi
+
 AC_OUTPUT
 
 test "${with_math}" != "yes" && AC_MSG_WARN([You are building without math. math allows accurate calculations. It should be enabled.]) || :

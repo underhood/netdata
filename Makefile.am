@@ -116,9 +116,18 @@ SUBDIRS += \
     web \
     claim \
     parser \
-    aclk/legacy \
     spawn \
     $(NULL)
+
+if ACLK_NG
+SUBDIRS += \
+    mqtt_websockets \
+    $(NULL)
+else
+SUBDIRS += \
+    aclk/legacy \
+    $(NULL)
+endif
 
 
 AM_CFLAGS = \
@@ -521,6 +530,18 @@ PARSER_FILES = \
     parser/parser.h \
     $(NULL)
 
+if ACLK_NG
+ACLK_FILES = \
+    aclk/aclk.c \
+    aclk/aclk.h \
+    aclk/aclk_stats.c \
+    aclk/aclk_stats.h \
+    aclk/aclk_otp.c \
+    aclk/aclk_otp.h \
+    aclk/legacy/aclk_lws_https_client.c \
+    aclk/legacy/aclk_lws_https_client.h \
+    $(NULL)
+else
 ACLK_FILES = \
     aclk/legacy/aclk_common.c \
     aclk/legacy/aclk_common.h \
@@ -543,6 +564,7 @@ ACLK_FILES += \
     aclk/legacy/aclk_lws_https_client.c \
     aclk/legacy/aclk_lws_https_client.h \
     $(NULL)
+endif
 endif
 
 
@@ -709,6 +731,13 @@ NETDATACLI_FILES = \
 sbin_PROGRAMS += netdata
 netdata_SOURCES = $(NETDATA_FILES)
 
+if ACLK_NG
+netdata_LDADD = \
+    externaldeps/libwebsockets/libwebsockets.a \
+    mqtt_websockets/libmqttwebsockets.a \
+    $(NETDATA_COMMON_LIBS) \
+    $(NULL)
+else
 if ENABLE_ACLK
 netdata_LDADD = \
     externaldeps/mosquitto/libmosquitto.a \
@@ -721,6 +750,7 @@ netdata_LDADD = \
     $(NETDATA_COMMON_LIBS) \
     $(NULL)
 endif
+endif #ACLK_NG
 
 if ENABLE_CXX_LINKER
     netdata_LINK = $(CXXLD) $(CXXFLAGS) $(LDFLAGS) -o $@

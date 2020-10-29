@@ -89,12 +89,15 @@ typedef enum aclk_proxy_type {
 
 // TODO
 const char *aclk_get_proxy(ACLK_PROXY_TYPE *type);
-#define aclk_wss_set_proxy(...)
-#define aclk_alarm_reload(...)
-#define aclk_update_alarm(...)
-#define aclk_update_chart(...)
-#define aclk_del_collector(...)
-#define aclk_add_collector(...)
+
+void aclk_dummy();
+
+#define aclk_wss_set_proxy(...) aclk_dummy()
+#define aclk_alarm_reload(...) aclk_dummy()
+#define aclk_update_alarm(...) aclk_dummy()
+#define aclk_update_chart(...) aclk_dummy()
+#define aclk_del_collector(...) aclk_dummy()
+#define aclk_add_collector(...) aclk_dummy()
 
 #define ACLK_CHART_TOPIC "outbound/meta"
 #define ACLK_ALARMS_TOPIC "outbound/alarms"

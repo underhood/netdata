@@ -3,7 +3,7 @@
 #include "aclk_stats.h"
 #include "mqtt_wss_client.h"
 #include "aclk_otp.h"
-//#include "aclk_query.h"
+#include "aclk_tx_msgs.h"
 
 //TODO remove most of this crap
 int aclk_force_reconnect = 0;
@@ -255,7 +255,12 @@ void *aclk_main(void *ptr)
     while (1) {
 #ifndef ACLK_DISABLE_CHALLENGE
         aclk_get_mqtt_otp(aclk_private_key, aclk_hostname, aclk_port, &mqtt_otp_user, &mqtt_otp_pass);
-        if (!mqtt_wss_connect(mqttwss_client, aclk_hostname, aclk_port, mqtt_otp_user, mqtt_otp_pass))
+        struct mqtt_connect_params mqtt_conn_params = {
+            .clientid = mqtt_otp_user,
+            .username = mqtt_otp_user,
+            .password = mqtt_otp_pass
+        };
+        if (!mqtt_wss_connect(mqttwss_client, aclk_hostname, aclk_port, &mqtt_conn_params))
             break;
 #else
         if (!mqtt_wss_connect(mqttwss_client, aclk_hostname, aclk_port, "anon", "anon"))
@@ -266,8 +271,13 @@ void *aclk_main(void *ptr)
         printf("Attempting Reconnect\n");
     }
 
+    aclk_send_info_metadata(mqttwss_client, 0);
+
     while (!netdata_exit) {
-        mqtt_wss_service(mqttwss_client, -1);
+        if(mqtt_wss_service(mqttwss_client, -1)){
+            error("Connection Error or Dropped");
+            break;
+        }
     }
 
     if (aclk_stats_enabled) {

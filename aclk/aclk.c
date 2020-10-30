@@ -253,9 +253,14 @@ void *aclk_main(void *ptr)
     }
 
     while (1) {
+#ifndef ACLK_DISABLE_CHALLENGE
         aclk_get_mqtt_otp(aclk_private_key, aclk_hostname, aclk_port, &mqtt_otp_user, &mqtt_otp_pass);
         if (!mqtt_wss_connect(mqttwss_client, aclk_hostname, aclk_port, mqtt_otp_user, mqtt_otp_pass))
             break;
+#else
+        if (!mqtt_wss_connect(mqttwss_client, aclk_hostname, aclk_port, "anon", "anon"))
+            break;
+#endif
         printf("Connect failed\n");
         sleep(1);
         printf("Attempting Reconnect\n");

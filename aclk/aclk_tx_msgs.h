@@ -4,7 +4,8 @@
 
 #include <json-c/json.h>
 #include "libnetdata/libnetdata.h"
+#include "mqtt_wss_client.h"
 
-struct json_object *aclk_send_info_metadata(int metadata_submitted);
+void aclk_send_info_metadata(mqtt_wss_client client, int metadata_submitted);
 
 #endif

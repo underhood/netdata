@@ -3,6 +3,62 @@
 #include "aclk_tx_msgs.h"
 #include "../daemon/common.h"
 
+#define ACLK_THREAD_NAME "ACLK_Query"
+#define ACLK_CHART_TOPIC "outbound/meta"
+#define ACLK_ALARMS_TOPIC "outbound/alarms"
+#define ACLK_METADATA_TOPIC "outbound/meta"
+#define ACLK_COMMAND_TOPIC "inbound/cmd"
+#define ACLK_TOPIC_STRUCTURE "/agent/%s"
+
+#define ACLK_LOG_CONVERSATION_DIR "/home/timo/projects/netdata/netdata/loglog"
+
+#ifndef __GNUC__
+#pragma region aclk_tx_msgs helper functions
+#endif
+
+/*
+ * Build a topic based on sub_topic and final_topic
+ * if the sub topic starts with / assume that is an absolute topic
+ *
+ */
+static const char *get_topic(const char *sub_topic, char *final_topic, int max_size)
+{
+    int rc;
+
+    if (likely(sub_topic && sub_topic[0] == '/'))
+        return sub_topic;
+
+    rc = snprintf(final_topic, max_size, ACLK_TOPIC_STRUCTURE "/%s", /* TODO */"864a1ca0-b537-4bae-b1aa-059663c21812", sub_topic);
+    if (unlikely(rc >= max_size))
+        error("Topic has been truncated to [%s] instead of [%s/%s]", final_topic, /* TODO */ACLK_TOPIC_STRUCTURE "/864a1ca0-b537-4bae-b1aa-059663c21812", sub_topic);
+
+    return final_topic;
+}
+
+#ifdef ACLK_LOG_CONVERSATION_DIR
+int conversation_log_counter = 0;
+#endif
+#define TOPIC_MAX_LEN 512
+static void aclk_send_message(mqtt_wss_client client, json_object *msg, const char *subtopic)
+{
+    char topic[TOPIC_MAX_LEN];
+    const char *str;
+
+    str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
+    mqtt_wss_publish(client, get_topic(subtopic, topic, TOPIC_MAX_LEN), str, strlen(str),  MQTT_WSS_PUB_QOS1);
+    error(str);
+#ifdef ACLK_LOG_CONVERSATION_DIR
+#define FN_MAX_LEN 1024
+    char filename[FN_MAX_LEN];
+    snprintf(filename, FN_MAX_LEN, ACLK_LOG_CONVERSATION_DIR "/%010d-tx.json", conversation_log_counter++);
+    json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
+#endif
+}
+
+/*
+ * Creates universal header common for all ACLK messages. User gets ownership of json object created.
+ * Usually this is freed by send function after message has been sent.
+ */
 static struct json_object *create_hdr(const char *type, const char *msg_id, time_t ts_secs, usec_t ts_us, int version)
 {
     uuid_t uuid;
@@ -65,12 +121,19 @@ static char *create_uuid()
     return uuid_str;
 }
 
+#ifndef __GNUC__
+#pragma endregion
+#endif
+
+#ifndef __GNUC__
+#pragma region aclk_tx_msgs message generators
+#endif
+
 /*
  * This will send the /api/v1/info
  */
 #define BUFFER_INITIAL_SIZE 4096
-//TODO back to void
-struct json_object *aclk_send_info_metadata(int metadata_submitted)
+void aclk_send_info_metadata(mqtt_wss_client client, int metadata_submitted)
 {
     BUFFER *local_buffer = buffer_create(BUFFER_INITIAL_SIZE);
     json_object *msg, *payload, *tmp;
@@ -101,11 +164,13 @@ struct json_object *aclk_send_info_metadata(int metadata_submitted)
     tmp = json_tokener_parse(local_buffer->buffer);
     json_object_object_add(payload, "charts", tmp);
 
-// TODO
-//    aclk_send_message(ACLK_METADATA_TOPIC, local_buffer->buffer, msg_id);
-//    json_object_put(msg);
+    aclk_send_message(client, msg, ACLK_METADATA_TOPIC);
 
+    json_object_put(msg);
     freez(msg_id);
     buffer_free(local_buffer);
-    return msg;
 }
+
+#ifndef __GNUC__
+#pragma endregion
+#endif

@@ -6,6 +6,7 @@
 #include "aclk_tx_msgs.h"
 #include "aclk_query.h"
 #include "aclk_util.h"
+#include "aclk_rx_msgs.h"
 
 #define ACLK_STABLE_TIMEOUT 3 // Minimum delay to mark AGENT as stable
 
@@ -167,17 +168,38 @@ void aclk_mqtt_wss_log_cb(mqtt_wss_log_type_t log_type, const char* str)
     error(str);
 }
 
-#define TEST_MSGLEN_MAX 512
+#define STRNCMP_PTR_SHIFT(ptr, str) \
+    if(strncmp(ptr, str, strlen(str))) \
+        error("Received message on unexpected topic %s", topic); \
+    ptr+=strlen(str); \
+
+//TODO prevent big buffer on stack
+#define TEST_MSGLEN_MAX 4096
 void msg_callback(const char *topic, const void *msg, size_t msglen, int qos)
 {
     char cmsg[TEST_MSGLEN_MAX];
+    const char *ptr = topic;
     size_t len = (msglen < TEST_MSGLEN_MAX - 1) ? msglen : (TEST_MSGLEN_MAX - 1);
     memcpy(cmsg,
            msg,
            len);
     cmsg[len] = 0;
 
-    error("Got Message From Broker Topic \"%s\" QOS %d MSG: \"%s\"", topic, qos, cmsg);
+    debug(D_ACLK, "Got Message From Broker Topic \"%s\" QOS %d MSG: \"%s\"", topic, qos, cmsg);
+
+    // Check topic is what we expect
+    STRNCMP_PTR_SHIFT(ptr, "/agent/")
+
+    netdata_mutex_lock(&localhost->claimed_id_lock);
+    STRNCMP_PTR_SHIFT(ptr, localhost->claimed_id);
+    netdata_mutex_unlock(&localhost->claimed_id_lock);
+
+    STRNCMP_PTR_SHIFT(ptr, "/inbound/cmd");
+    // This should be the end of it
+    if (*ptr)
+        error("Received message on unexpected topic %s", topic);
+
+    aclk_handle_cloud_message(cmsg);
 }
 
 void puback_callback(uint16_t packet_id)

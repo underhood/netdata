@@ -546,6 +546,8 @@ ACLK_FILES = \
     aclk/legacy/aclk_lws_https_client.h \
     aclk/aclk_tx_msgs.c \
     aclk/aclk_tx_msgs.h \
+    aclk/aclk_rx_msgs.c \
+    aclk/aclk_rx_msgs.h \
     $(NULL)
 else
 ACLK_FILES = \

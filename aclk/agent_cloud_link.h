@@ -60,7 +60,6 @@ char *create_uuid();
 
 // callbacks for agent cloud link
 int aclk_subscribe(char *topic, int qos);
-int cloud_to_agent_parse(JSON_ENTRY *e);
 void aclk_disconnect();
 void aclk_connect();
 

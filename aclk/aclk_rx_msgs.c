@@ -7,6 +7,62 @@
 
 #define ACLK_V2_PAYLOAD_SEPARATOR "\x0D\x0A\x0D\x0A"
 
+static int cloud_to_agent_parse(JSON_ENTRY *e)
+{
+    struct aclk_request *data = e->callback_data;
+
+    switch (e->type) {
+        case JSON_OBJECT:
+        case JSON_ARRAY:
+            break;
+        case JSON_STRING:
+            if (!strcmp(e->name, "msg-id")) {
+                data->msg_id = strdupz(e->data.string);
+                break;
+            }
+            if (!strcmp(e->name, "type")) {
+                data->type_id = strdupz(e->data.string);
+                break;
+            }
+            if (!strcmp(e->name, "callback-topic")) {
+                data->callback_topic = strdupz(e->data.string);
+                break;
+            }
+            if (!strcmp(e->name, "payload")) {
+                if (likely(e->data.string)) {
+                    size_t len = strlen(e->data.string);
+                    data->payload = mallocz(len+1);
+                    if (!url_decode_r(data->payload, e->data.string, len + 1))
+                        strcpy(data->payload, e->data.string);
+                }
+                break;
+            }
+            break;
+        case JSON_NUMBER:
+            if (!strcmp(e->name, "version")) {
+                data->version = e->data.number;
+                break;
+            }
+            if (!strcmp(e->name, "min-version")) {
+                data->min_version = e->data.number;
+                break;
+            }
+            if (!strcmp(e->name, "max-version")) {
+                data->max_version = e->data.number;
+                break;
+            }
+
+            break;
+
+        case JSON_BOOLEAN:
+            break;
+
+        case JSON_NULL:
+            break;
+    }
+    return 0;
+}
+
 static inline int aclk_extract_v2_data(char *payload, char **data)
 {
     char* ptr = strstr(payload, ACLK_V2_PAYLOAD_SEPARATOR);

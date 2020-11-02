@@ -187,6 +187,31 @@ void aclk_send_alarm_metadata(mqtt_wss_client client, int metadata_submitted)
     buffer_free(local_buffer);
 }
 
+void aclk_hello_msg(mqtt_wss_client client)
+{
+    json_object *tmp, *msg;
+
+    char *msg_id = create_uuid();
+
+    ACLK_SHARED_STATE_LOCK;
+    aclk_shared_state.version_neg = 0;
+    aclk_shared_state.version_neg_wait_till = now_monotonic_usec() + USEC_PER_SEC * VERSION_NEG_TIMEOUT;
+    ACLK_SHARED_STATE_UNLOCK;
+
+    //Hello message is versioned separatelly from the rest of the protocol
+    msg = create_hdr("hello", msg_id, 0, 0, ACLK_VERSION_NEG_VERSION);
+
+    tmp = json_object_new_int(ACLK_VERSION_MIN);
+    json_object_object_add(msg, "min-version", tmp);
+
+    tmp = json_object_new_int(ACLK_VERSION_MAX);
+    json_object_object_add(msg, "max-version", tmp);
+
+    aclk_send_message(client, msg, ACLK_METADATA_TOPIC);
+
+    freez(msg_id);
+}
+
 #ifndef __GNUC__
 #pragma endregion
 #endif

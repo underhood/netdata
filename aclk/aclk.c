@@ -244,16 +244,24 @@ static int read_query_thread_count()
 
 static int handle_connection(mqtt_wss_client mqttwss_client)
 {
+    time_t last_periodic_query_wakeup = now_monotonic_sec();
     while (!netdata_exit) {
         // timeout 1000 to check at least once a second
         // for netdata_exit
-        if(mqtt_wss_service(mqttwss_client, 1000)){
+        if (mqtt_wss_service(mqttwss_client, 1000)){
             error("Connection Error or Dropped");
             return 1;
         }
-        // wake up at least one Query Thread at least
-        // once per second
-        QUERY_THREAD_WAKEUP;
+
+        // mqtt_wss_service will return faster than in one second
+        // if there is enough work to do
+        time_t now = now_monotonic_sec();
+        if (last_periodic_query_wakeup < now) {
+            // wake up at least one Query Thread at least
+            // once per second
+            last_periodic_query_wakeup = now;
+            QUERY_THREAD_WAKEUP;
+        }
     }
     return 0;
 }
@@ -302,12 +310,14 @@ static inline void localhost_popcorn_finish_actions(mqtt_wss_client client, stru
     aclk_send_alarm_metadata(client, 0);
 }
 
-static inline void mqtt_connected_actions()
+static inline void mqtt_connected_actions(mqtt_wss_client client)
 {
     // TODO global vars?
     usec_t now = now_realtime_usec();
     aclk_session_sec = now / USEC_PER_SEC;
-    aclk_session_us = now % USEC_PER_SEC;  
+    aclk_session_us = now % USEC_PER_SEC;
+
+    aclk_hello_msg(client);
 }
 
 static void wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_threads *query_threads)
@@ -414,7 +424,7 @@ void *aclk_main(void *ptr)
     }
 
     info("MQTTWSS connection succeeded");
-    mqtt_connected_actions();
+    mqtt_connected_actions(mqttwss_client);
 
     wait_popcorning_finishes(mqttwss_client, &query_threads);
 

@@ -4,13 +4,13 @@
 #include "mqtt_wss_client.h"
 #include "aclk_otp.h"
 #include "aclk_tx_msgs.h"
+#include "aclk_query.h"
+#include "aclk_util.h"
 
-//TODO remove most of this crap
-int aclk_force_reconnect = 0;
-int aclk_connecting = 0;
+#define ACLK_STABLE_TIMEOUT 3 // Minimum delay to mark AGENT as stable
+
+//TODO remove most (as in 99.999999999%) of this crap
 int aclk_connected = 0;
-int aclk_subscribed = 0;
-char *aclk_username = NULL, *aclk_password = NULL;
 int aclk_disable_runtime = 0;
 int aclk_disable_single_updates = 0;
 int aclk_kill_link = 0;
@@ -18,6 +18,8 @@ int aclk_kill_link = 0;
 mqtt_wss_client mqttwss_client;
 
 netdata_mutex_t aclk_shared_state_mutex = NETDATA_MUTEX_INITIALIZER;
+#define ACLK_SHARED_STATE_LOCK netdata_mutex_lock(&aclk_shared_state_mutex)
+#define ACLK_SHARED_STATE_UNLOCK netdata_mutex_unlock(&aclk_shared_state_mutex)
 
 //TODO remove
 void aclk_dummy() {}
@@ -84,45 +86,6 @@ static int load_private_key()
 biofailed:
     freez(private_key);
     return 1;
-}
-
-static int aclk_decode_base_url(char *url, char **aclk_hostname, int *aclk_port)
-{
-    int pos = 0;
-    if (!strncmp("https://", url, 8)) {
-        pos = 8;
-    } else if (!strncmp("http://", url, 7)) {
-        error("Cannot connect ACLK over %s -> unencrypted link is not supported", url);
-        return 1;
-    }
-    int host_end = pos;
-    while (url[host_end] != 0 && url[host_end] != '/' && url[host_end] != ':')
-        host_end++;
-    if (url[host_end] == 0) {
-        *aclk_hostname = strdupz(url + pos);
-        *aclk_port = 443;
-        info("Setting ACLK target host=%s port=%d from %s", *aclk_hostname, *aclk_port, url);
-        return 0;
-    }
-    if (url[host_end] == ':') {
-        *aclk_hostname = callocz(host_end - pos + 1, 1);
-        strncpy(*aclk_hostname, url + pos, host_end - pos);
-        int port_end = host_end + 1;
-        while (url[port_end] >= '0' && url[port_end] <= '9')
-            port_end++;
-        if (port_end - host_end > 6) {
-            error("Port specified in %s is invalid", url);
-            return 0;
-        }
-        *aclk_port = atoi(&url[host_end+1]);
-    }
-    if (url[host_end] == '/') {
-        *aclk_port = 443;
-        *aclk_hostname = callocz(1, host_end - pos + 1);
-        strncpy(*aclk_hostname, url+pos, host_end - pos);
-    }
-    info("Setting ACLK target host=%s port=%d from %s", *aclk_hostname, *aclk_port, url);
-    return 0;
 }
 
 static int wait_till_cloud_enabled()
@@ -197,8 +160,121 @@ static int wait_till_agent_claim_ready(char **aclk_hostname, int *aclk_port)
 
 void aclk_mqtt_wss_log_cb(mqtt_wss_log_type_t log_type, const char* str)
 {
+    //TODO filter based on log_type
     (void)log_type;
     error(str);
+}
+
+#define TEST_MSGLEN_MAX 512
+void msg_callback(const char *topic, const void *msg, size_t msglen, int qos)
+{
+    char cmsg[TEST_MSGLEN_MAX];
+    size_t len = (msglen < TEST_MSGLEN_MAX - 1) ? msglen : (TEST_MSGLEN_MAX - 1);
+    memcpy(cmsg,
+           msg,
+           len);
+    cmsg[len] = 0;
+
+    error("Got Message From Broker Topic \"%s\" QOS %d MSG: \"%s\"", topic, qos, cmsg);
+}
+
+void puback_callback(uint16_t packet_id)
+{
+    error("Got PUBACK for %d", (int)packet_id);
+}
+
+static int read_query_thread_count()
+{
+    int threads = MIN(processors/2, 6);
+    threads = MAX(threads, 2);
+    threads = config_get_number(CONFIG_SECTION_CLOUD, "query thread count", threads);
+    if(threads < 1) {
+        error("You need at least one query thread. Overriding configured setting of \"%d\"", threads);
+        threads = 1;
+        config_set_number(CONFIG_SECTION_CLOUD, "query thread count", threads);
+    }
+    return threads;
+}
+
+static int handle_connection(mqtt_wss_client mqttwss_client)
+{
+    while (!netdata_exit) {
+        // timeout 1000 to check at least once a second
+        // for netdata_exit
+        if(mqtt_wss_service(mqttwss_client, 1000)){
+            error("Connection Error or Dropped");
+            return 1;
+        }
+        // wake up at least one Query Thread at least
+        // once per second
+        QUERY_THREAD_WAKEUP;
+    }
+    return 0;
+}
+
+inline static int aclk_popcorn_check_bump()
+{
+    ACLK_SHARED_STATE_LOCK;
+    if (unlikely(aclk_shared_state.agent_state == AGENT_INITIALIZING)) {
+        aclk_shared_state.last_popcorn_interrupt = now_realtime_sec();
+        ACLK_SHARED_STATE_UNLOCK;
+        return 1;
+    }
+    ACLK_SHARED_STATE_UNLOCK;
+    return 0;
+}
+
+/*
+ * Subscribe to a topic in the cloud
+ * The final subscription will be in the form
+ * /agent/claim_id/<sub_topic>
+ */
+#define ACLK_MAX_TOPIC 255
+static int aclk_subscribe(mqtt_wss_client client, char *sub_topic, int qos)
+{
+    char topic[ACLK_MAX_TOPIC + 1];
+    const char *final_topic;
+
+    final_topic = aclk_get_topic(sub_topic, "864a1ca0-b537-4bae-b1aa-059663c21812" /* TODO */, topic, ACLK_MAX_TOPIC);
+    if (unlikely(!final_topic)) {
+        errno = 0;
+        error("Unable to build outgoing topic; truncated?");
+        return 1;
+    }
+
+    return mqtt_wss_subscribe(client, final_topic, qos);
+}
+
+static inline void localhost_popcorn_finish_actions(mqtt_wss_client client, struct aclk_query_threads *query_threads)
+{
+    aclk_subscribe(client, ACLK_COMMAND_TOPIC, 1);
+    if (unlikely(!query_threads->thread_list))
+        aclk_query_threads_start(query_threads);
+}
+
+static void wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_threads *query_threads)
+{
+    time_t elapsed;
+    int need_wait;
+    while (!netdata_exit) {
+        ACLK_SHARED_STATE_LOCK;
+        if (likely(aclk_shared_state.agent_state != AGENT_INITIALIZING)) {
+            ACLK_SHARED_STATE_UNLOCK;
+            return;
+        }
+        elapsed = now_realtime_sec() - aclk_shared_state.last_popcorn_interrupt;
+        if (elapsed > ACLK_STABLE_TIMEOUT) {
+            aclk_shared_state.agent_state = AGENT_STABLE;
+            ACLK_SHARED_STATE_UNLOCK;
+            error("ACLK localhost popocorn finished");
+            localhost_popcorn_finish_actions(client, query_threads);
+            break;
+        }
+        ACLK_SHARED_STATE_UNLOCK;
+        need_wait = ACLK_STABLE_TIMEOUT - elapsed;
+        error("ACLK localhost popocorn wait %d seconds longer", need_wait);
+        sleep(need_wait);
+    }
 }
 
 /**
@@ -214,9 +290,13 @@ void aclk_mqtt_wss_log_cb(mqtt_wss_log_type_t log_type, const char* str)
 void *aclk_main(void *ptr)
 {
     struct netdata_static_thread *static_thread = (struct netdata_static_thread *)ptr;
+
     struct aclk_stats_thread *stats_thread = NULL;
 
-    char *aclk_hostname = NULL; // Initializers are over-written but prevent gcc complaining about clobbering.
+    struct aclk_query_threads query_threads;
+    query_threads.thread_list = NULL;
+
+    char *aclk_hostname = NULL;
     int aclk_port;
 
     char *mqtt_otp_user = NULL;
@@ -231,13 +311,16 @@ void *aclk_main(void *ptr)
     static_thread->enabled = NETDATA_MAIN_THREAD_EXITED;
     return NULL;
 #endif
+    aclk_popcorn_check_bump();
+    query_threads.count = read_query_thread_count();
+
     if (wait_till_cloud_enabled())
         goto exit;
 
     if (wait_till_agent_claim_ready(&aclk_hostname, &aclk_port))
         goto exit;
 
-    if (!(mqttwss_client = mqtt_wss_new("mqtt_wss", aclk_mqtt_wss_log_cb))) {
+    if (!(mqttwss_client = mqtt_wss_new("mqtt_wss", aclk_mqtt_wss_log_cb, msg_callback, puback_callback))) {
         error("Couldn't initialize MQTT_WSS network library");
         goto exit;
     }
@@ -267,18 +350,21 @@ void *aclk_main(void *ptr)
             break;
 #endif
         printf("Connect failed\n");
+        // TODO exponential something thing or other thing instead of 1
         sleep(1);
         printf("Attempting Reconnect\n");
     }
+    info("MQTTWSS connection succeeded");
 
-    aclk_send_info_metadata(mqttwss_client, 0);
+    wait_popcorning_finishes(mqttwss_client, &query_threads);
 
-    while (!netdata_exit) {
-        if(mqtt_wss_service(mqttwss_client, -1)){
-            error("Connection Error or Dropped");
-            break;
-        }
-    }
+    handle_connection(mqttwss_client);
+
+
+// Tear Down
+    QUERY_THREAD_WAKEUP_ALL;
+
+    aclk_query_threads_cleanup(&query_threads);
 
     if (aclk_stats_enabled) {
         netdata_thread_join(*stats_thread->thread, NULL);

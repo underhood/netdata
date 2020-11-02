@@ -534,8 +534,12 @@ if ACLK_NG
 ACLK_FILES = \
     aclk/aclk.c \
     aclk/aclk.h \
+    aclk/aclk_util.c \
+    aclk/aclk_util.h \
     aclk/aclk_stats.c \
     aclk/aclk_stats.h \
+    aclk/aclk_query.c \
+    aclk/aclk_query.h \
     aclk/aclk_otp.c \
     aclk/aclk_otp.h \
     aclk/legacy/aclk_lws_https_client.c \

@@ -11,6 +11,65 @@ pthread_mutex_t query_lock_wait = PTHREAD_MUTEX_INITIALIZER;
 #define QUERY_THREAD_LOCK pthread_mutex_lock(&query_lock_wait)
 #define QUERY_THREAD_UNLOCK pthread_mutex_unlock(&query_lock_wait)
 
+/**
+ * Main query processing thread
+ *
+ * On startup wait for the agent collectors to initialize
+ * Expect at least a time of ACLK_STABLE_TIMEOUT seconds
+ * of no new collectors coming in in order to mark the agent
+ * as stable (set agent_state = AGENT_STABLE)
+ */
+void *aclk_query_main_thread(void *ptr)
+{
+    struct aclk_query_thread *info = ptr;
+    error("Started Thread %d", info->idx);
+    while (!netdata_exit) {
+        QUERY_THREAD_LOCK;
+
+        if (unlikely(pthread_cond_wait(&query_cond_wait, &query_lock_wait)))
+            sleep_usec(USEC_PER_SEC * 1);
+
+        QUERY_THREAD_UNLOCK;
+    }
+    return NULL;
+}
+
+#define TASK_LEN_MAX 16
+void aclk_query_threads_start(struct aclk_query_threads *query_threads)
+{
+    info("Starting %d query threads.", query_threads->count);
+
+    char thread_name[TASK_LEN_MAX];
+    query_threads->thread_list = callocz(query_threads->count, sizeof(struct aclk_query_thread));
+    for (int i = 0; i < query_threads->count; i++) {
+        query_threads->thread_list[i].idx = i; //thread needs to know its index for statistics
+
+        if(unlikely(snprintf(thread_name, TASK_LEN_MAX, "%s_%d", ACLK_QUERY_THREAD_NAME, i) < 0))
+            error("snprintf encoding error");
+        netdata_thread_create(
+            &query_threads->thread_list[i].thread, thread_name, NETDATA_THREAD_OPTION_JOINABLE, aclk_query_main_thread,
+            &query_threads->thread_list[i]);
+    }
+}
+
+void aclk_query_threads_cleanup(struct aclk_query_threads *query_threads)
+{
+    if (query_threads && query_threads->thread_list) {
+        for (int i = 0; i < query_threads->count; i++) {
+            netdata_thread_join(query_threads->thread_list[i].thread, NULL);
+        }
+        freez(query_threads->thread_list);
+    }
+
+/*  TODO
+    struct aclk_query *this_query;
+    do {
+        this_query = aclk_queue_pop();
+        aclk_query_free(this_query);
+    } while (this_query);*/
+}
+
+#ifdef UMBAKARNA_TODO_DELETEME
 volatile int aclk_connected = 0;
 
 #ifndef __GNUC__
@@ -728,4 +787,6 @@ void *aclk_query_main_thread(void *ptr)
 
 #ifndef __GNUC__
 #pragma endregion
+#endif
+
 #endif

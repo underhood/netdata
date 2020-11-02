@@ -2,38 +2,19 @@
 
 #include "aclk_tx_msgs.h"
 #include "../daemon/common.h"
+#include "aclk_util.h"
 
 #define ACLK_THREAD_NAME "ACLK_Query"
 #define ACLK_CHART_TOPIC "outbound/meta"
 #define ACLK_ALARMS_TOPIC "outbound/alarms"
 #define ACLK_METADATA_TOPIC "outbound/meta"
 #define ACLK_COMMAND_TOPIC "inbound/cmd"
-#define ACLK_TOPIC_STRUCTURE "/agent/%s"
 
 #define ACLK_LOG_CONVERSATION_DIR "/home/timo/projects/netdata/netdata/loglog"
 
 #ifndef __GNUC__
 #pragma region aclk_tx_msgs helper functions
 #endif
-
-/*
- * Build a topic based on sub_topic and final_topic
- * if the sub topic starts with / assume that is an absolute topic
- *
- */
-static const char *get_topic(const char *sub_topic, char *final_topic, int max_size)
-{
-    int rc;
-
-    if (likely(sub_topic && sub_topic[0] == '/'))
-        return sub_topic;
-
-    rc = snprintf(final_topic, max_size, ACLK_TOPIC_STRUCTURE "/%s", /* TODO */"864a1ca0-b537-4bae-b1aa-059663c21812", sub_topic);
-    if (unlikely(rc >= max_size))
-        error("Topic has been truncated to [%s] instead of [%s/%s]", final_topic, /* TODO */ACLK_TOPIC_STRUCTURE "/864a1ca0-b537-4bae-b1aa-059663c21812", sub_topic);
-
-    return final_topic;
-}
 
 #ifdef ACLK_LOG_CONVERSATION_DIR
 int conversation_log_counter = 0;
@@ -45,8 +26,7 @@ static void aclk_send_message(mqtt_wss_client client, json_object *msg, const ch
     const char *str;
 
     str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
-    mqtt_wss_publish(client, get_topic(subtopic, topic, TOPIC_MAX_LEN), str, strlen(str),  MQTT_WSS_PUB_QOS1);
-    error(str);
+    mqtt_wss_publish(client, aclk_get_topic(subtopic, "864a1ca0-b537-4bae-b1aa-059663c21812" /* TODO */, topic, TOPIC_MAX_LEN), str, strlen(str),  MQTT_WSS_PUB_QOS1);
 #ifdef ACLK_LOG_CONVERSATION_DIR
 #define FN_MAX_LEN 1024
     char filename[FN_MAX_LEN];

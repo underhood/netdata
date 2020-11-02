@@ -4,8 +4,10 @@
 
 #include <json-c/json.h>
 #include "libnetdata/libnetdata.h"
+#include "../daemon/common.h"
 #include "mqtt_wss_client.h"
 
-void aclk_send_info_metadata(mqtt_wss_client client, int metadata_submitted);
+void aclk_send_info_metadata(mqtt_wss_client client, int metadata_submitted, RRDHOST *host);
+void aclk_send_alarm_metadata(mqtt_wss_client client, int metadata_submitted);
 
 #endif

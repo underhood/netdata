@@ -132,8 +132,8 @@ static char *create_uuid()
 /*
  * This will send the /api/v1/info
  */
-#define BUFFER_INITIAL_SIZE 4096
-void aclk_send_info_metadata(mqtt_wss_client client, int metadata_submitted)
+#define BUFFER_INITIAL_SIZE (1024 * 16)
+void aclk_send_info_metadata(mqtt_wss_client client, int metadata_submitted, RRDHOST *host)
 {
     BUFFER *local_buffer = buffer_create(BUFFER_INITIAL_SIZE);
     json_object *msg, *payload, *tmp;
@@ -154,19 +154,60 @@ void aclk_send_info_metadata(mqtt_wss_client client, int metadata_submitted)
     payload = json_object_new_object();
     json_object_object_add(msg, "payload", payload);
 
-    web_client_api_request_v1_info_fill_buffer(localhost, local_buffer);
+    web_client_api_request_v1_info_fill_buffer(host, local_buffer);
     tmp = json_tokener_parse(local_buffer->buffer);
     json_object_object_add(payload, "info", tmp);
 
     buffer_flush(local_buffer);
 
-    charts2json(localhost, local_buffer, 1, 0);
+    charts2json(host, local_buffer, 1, 0);
     tmp = json_tokener_parse(local_buffer->buffer);
     json_object_object_add(payload, "charts", tmp);
 
     aclk_send_message(client, msg, ACLK_METADATA_TOPIC);
 
     json_object_put(msg);
+    freez(msg_id);
+    buffer_free(local_buffer);
+}
+
+// TODO should include header instead
+void health_active_log_alarms_2json(RRDHOST *host, BUFFER *wb);
+
+void aclk_send_alarm_metadata(mqtt_wss_client client, int metadata_submitted)
+{
+    BUFFER *local_buffer = buffer_create(BUFFER_INITIAL_SIZE);
+    json_object *msg, *payload, *tmp;
+
+    char *msg_id = create_uuid();
+    buffer_flush(local_buffer);
+    local_buffer->contenttype = CT_APPLICATION_JSON;
+
+    // on_connect messages are sent on a health reload, if the on_connect message is real then we
+    // use the session time as the fake timestamp to indicate that it starts the session. If it is
+    // a fake on_connect message then use the real timestamp to indicate it is within the existing
+    // session.
+
+    if (metadata_submitted == ACLK_METADATA_SENT)
+        msg = create_hdr("connect_alarms", msg_id, 0, 0, 2 /* TODO aclk_shared_state.version_neg*/);
+    else
+        msg = create_hdr("connect_alarms", msg_id, 0 /* TODO aclk_session_sec */, 0 /* TODO aclk_session_us */, 2 /* TODO aclk_shared_state.version_neg*/);
+
+    payload = json_object_new_object();
+    json_object_object_add(msg, "payload", payload);
+
+    health_alarms2json(localhost, local_buffer, 1);
+    tmp = json_tokener_parse(local_buffer->buffer);
+    json_object_object_add(payload, "configured-alarms", tmp);
+
+    buffer_flush(local_buffer);
+
+    health_active_log_alarms_2json(localhost, local_buffer);
+    tmp = json_tokener_parse(local_buffer->buffer);
+    json_object_object_add(payload, "alarms-active", tmp);
+
+    aclk_send_message(client, msg, ACLK_ALARMS_TOPIC);
+
     freez(msg_id);
     buffer_free(local_buffer);
 }

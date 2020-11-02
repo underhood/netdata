@@ -8,6 +8,12 @@
 #include "aclk_util.h"
 #include "aclk_rx_msgs.h"
 
+#ifdef ACLK_LOG_CONVERSATION_DIR
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#endif
+
 #define ACLK_STABLE_TIMEOUT 3 // Minimum delay to mark AGENT as stable
 
 //TODO remove most (as in 99.999999999%) of this crap
@@ -174,16 +180,32 @@ void aclk_mqtt_wss_log_cb(mqtt_wss_log_type_t log_type, const char* str)
     ptr+=strlen(str); \
 
 //TODO prevent big buffer on stack
-#define TEST_MSGLEN_MAX 4096
-void msg_callback(const char *topic, const void *msg, size_t msglen, int qos)
+#define RX_MSGLEN_MAX 4096
+static void msg_callback(const char *topic, const void *msg, size_t msglen, int qos)
 {
-    char cmsg[TEST_MSGLEN_MAX];
+    char cmsg[RX_MSGLEN_MAX];
     const char *ptr = topic;
-    size_t len = (msglen < TEST_MSGLEN_MAX - 1) ? msglen : (TEST_MSGLEN_MAX - 1);
+    size_t len = (msglen < RX_MSGLEN_MAX - 1) ? msglen : (RX_MSGLEN_MAX - 1);
+
+    if (msglen > RX_MSGLEN_MAX - 1)
+        error("Incoming ACLK message was bigger than MAX of %d and got truncated.", RX_MSGLEN_MAX);
+
     memcpy(cmsg,
            msg,
            len);
     cmsg[len] = 0;
+
+#ifdef ACLK_LOG_CONVERSATION_DIR
+#define FN_MAX_LEN 512
+    char filename[FN_MAX_LEN];
+    int logfd;
+    snprintf(filename, FN_MAX_LEN, ACLK_LOG_CONVERSATION_DIR "/%010d-rx.json", ACLK_GET_CONV_LOG_NEXT());
+    logfd = open(filename, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR );
+    if(logfd < 0)
+        error("Error opening ACLK Conversation logfile \"%s\" for RX message.", filename);
+    write(logfd, msg, msglen);
+    close(logfd);
+#endif
 
     debug(D_ACLK, "Got Message From Broker Topic \"%s\" QOS %d MSG: \"%s\"", topic, qos, cmsg);
 
@@ -202,7 +224,7 @@ void msg_callback(const char *topic, const void *msg, size_t msglen, int qos)
     aclk_handle_cloud_message(cmsg);
 }
 
-void puback_callback(uint16_t packet_id)
+static void puback_callback(uint16_t packet_id)
 {
     error("Got PUBACK for %d", (int)packet_id);
 }
@@ -282,7 +304,7 @@ static inline void localhost_popcorn_finish_actions(mqtt_wss_client client, stru
 
 static inline void mqtt_connected_actions()
 {
-    // TODO gobal vars?
+    // TODO global vars?
     usec_t now = now_realtime_usec();
     aclk_session_sec = now / USEC_PER_SEC;
     aclk_session_us = now % USEC_PER_SEC;  

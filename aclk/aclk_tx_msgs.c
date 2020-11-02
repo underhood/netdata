@@ -10,15 +10,10 @@
 #define ACLK_METADATA_TOPIC "outbound/meta"
 #define ACLK_COMMAND_TOPIC "inbound/cmd"
 
-#define ACLK_LOG_CONVERSATION_DIR "/home/timo/projects/netdata/netdata/loglog"
-
 #ifndef __GNUC__
 #pragma region aclk_tx_msgs helper functions
 #endif
 
-#ifdef ACLK_LOG_CONVERSATION_DIR
-int conversation_log_counter = 0;
-#endif
 #define TOPIC_MAX_LEN 512
 static void aclk_send_message(mqtt_wss_client client, json_object *msg, const char *subtopic)
 {
@@ -30,7 +25,7 @@ static void aclk_send_message(mqtt_wss_client client, json_object *msg, const ch
 #ifdef ACLK_LOG_CONVERSATION_DIR
 #define FN_MAX_LEN 1024
     char filename[FN_MAX_LEN];
-    snprintf(filename, FN_MAX_LEN, ACLK_LOG_CONVERSATION_DIR "/%010d-tx.json", conversation_log_counter++);
+    snprintf(filename, FN_MAX_LEN, ACLK_LOG_CONVERSATION_DIR "/%010d-tx.json", ACLK_GET_CONV_LOG_NEXT());
     json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
 #endif
 }

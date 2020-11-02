@@ -15,6 +15,9 @@ int aclk_disable_runtime = 0;
 int aclk_disable_single_updates = 0;
 int aclk_kill_link = 0;
 
+usec_t aclk_session_us = 0;         // Used by the mqtt layer
+time_t aclk_session_sec = 0;        // Used by the mqtt layer
+
 mqtt_wss_client mqttwss_client;
 
 netdata_mutex_t aclk_shared_state_mutex = NETDATA_MUTEX_INITIALIZER;
@@ -25,7 +28,6 @@ netdata_mutex_t aclk_shared_state_mutex = NETDATA_MUTEX_INITIALIZER;
 void aclk_dummy() {}
 
 struct aclk_shared_state aclk_shared_state = {
-    .metadata_submitted = ACLK_METADATA_REQUIRED,
     .agent_state = AGENT_INITIALIZING,
     .last_popcorn_interrupt = 0,
     .version_neg = 0,
@@ -250,6 +252,18 @@ static inline void localhost_popcorn_finish_actions(mqtt_wss_client client, stru
     aclk_subscribe(client, ACLK_COMMAND_TOPIC, 1);
     if (unlikely(!query_threads->thread_list))
         aclk_query_threads_start(query_threads);
+
+    // TODO of course this has to be later sent trough QUERY Threads
+    aclk_send_info_metadata(client, 0, localhost);
+    aclk_send_alarm_metadata(client, 0);
+}
+
+static inline void mqtt_connected_actions()
+{
+    // TODO gobal vars?
+    usec_t now = now_realtime_usec();
+    aclk_session_sec = now / USEC_PER_SEC;
+    aclk_session_us = now % USEC_PER_SEC;  
 }
 
 static void wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_threads *query_threads)
@@ -354,7 +368,9 @@ void *aclk_main(void *ptr)
         sleep(1);
         printf("Attempting Reconnect\n");
     }
+
     info("MQTTWSS connection succeeded");
+    mqtt_connected_actions();
 
     wait_popcorning_finishes(mqttwss_client, &query_threads);
 

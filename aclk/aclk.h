@@ -31,6 +31,9 @@ extern int aclk_disable_single_updates;
 extern int aclk_kill_link;
 extern int aclk_connected;
 
+extern usec_t aclk_session_us;         // Used by the mqtt layer
+extern time_t aclk_session_sec;        // Used by the mqtt layer
+
 void *aclk_main(void *ptr);
 void aclk_single_update_disable();
 void aclk_single_update_enable();
@@ -58,18 +61,11 @@ typedef enum aclk_cmd {
     ACLK_CMD_CLOUD_QUERY_2
 } ACLK_CMD;
 
-typedef enum aclk_metadata_state {
-    ACLK_METADATA_REQUIRED,
-    ACLK_METADATA_CMD_QUEUED,
-    ACLK_METADATA_SENT
-} ACLK_METADATA_STATE;
-
 typedef enum aclk_agent_state {
     AGENT_INITIALIZING,
     AGENT_STABLE
 } ACLK_AGENT_STATE;
 extern struct aclk_shared_state {
-    ACLK_METADATA_STATE metadata_submitted;
     ACLK_AGENT_STATE agent_state;
     time_t last_popcorn_interrupt;
 

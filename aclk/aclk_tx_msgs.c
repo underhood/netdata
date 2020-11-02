@@ -76,12 +76,12 @@ static struct json_object *create_hdr(const char *type, const char *msg_id, time
     tmp = json_object_new_int64(ts_us);
     json_object_object_add(obj, "timestamp-offset-usec", tmp);
 
-    tmp = json_object_new_int64(0 /* TODO aclk_session_sec */);
+    tmp = json_object_new_int64(aclk_session_sec);
     json_object_object_add(obj, "connect", tmp);
 
 // TODO handle this somehow see above
 //    tmp = json_object_new_uint64(0 /* TODO aclk_session_us */);
-    tmp = json_object_new_int64(0 /* TODO aclk_session_us */);
+    tmp = json_object_new_int64(aclk_session_us);
     json_object_object_add(obj, "connect-offset-usec", tmp);
 
     tmp = json_object_new_int(version);
@@ -129,7 +129,7 @@ void aclk_send_info_metadata(mqtt_wss_client client, int metadata_submitted, RRD
     if (metadata_submitted)
         msg = create_hdr("update", msg_id, 0, 0, /* TODO aclk_shared_state.version_neg*/ 2);
     else
-        msg = create_hdr("connect", msg_id, 0/* TODO aclk_session_sec */, 0/* TODO aclk_session_us */, /* TODO aclk_shared_state.version_neg*/ 2);
+        msg = create_hdr("connect", msg_id, aclk_session_sec, aclk_session_us, /* TODO aclk_shared_state.version_neg*/ 2);
 
     payload = json_object_new_object();
     json_object_object_add(msg, "payload", payload);
@@ -168,10 +168,10 @@ void aclk_send_alarm_metadata(mqtt_wss_client client, int metadata_submitted)
     // a fake on_connect message then use the real timestamp to indicate it is within the existing
     // session.
 
-    if (metadata_submitted == ACLK_METADATA_SENT)
+    if (metadata_submitted)
         msg = create_hdr("connect_alarms", msg_id, 0, 0, 2 /* TODO aclk_shared_state.version_neg*/);
     else
-        msg = create_hdr("connect_alarms", msg_id, 0 /* TODO aclk_session_sec */, 0 /* TODO aclk_session_us */, 2 /* TODO aclk_shared_state.version_neg*/);
+        msg = create_hdr("connect_alarms", msg_id, aclk_session_sec, aclk_session_us, 2 /* TODO aclk_shared_state.version_neg*/);
 
     payload = json_object_new_object();
     json_object_object_add(msg, "payload", payload);

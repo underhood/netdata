@@ -5,6 +5,8 @@
 #include "aclk_stats.h"
 #include "aclk_query.h"
 
+#define ACLK_V2_PAYLOAD_SEPARATOR "\x0D\x0A\x0D\x0A"
+
 static inline int aclk_extract_v2_data(char *payload, char **data)
 {
     char* ptr = strstr(payload, ACLK_V2_PAYLOAD_SEPARATOR);

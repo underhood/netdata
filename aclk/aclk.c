@@ -5,6 +5,7 @@
 #include "aclk_otp.h"
 #include "aclk_tx_msgs.h"
 #include "aclk_query.h"
+#include "aclk_query_queue.h"
 #include "aclk_util.h"
 #include "aclk_rx_msgs.h"
 
@@ -315,11 +316,15 @@ static inline void localhost_popcorn_finish_actions(mqtt_wss_client client, stru
 {
     aclk_subscribe(client, ACLK_COMMAND_TOPIC, 1);
     if (unlikely(!query_threads->thread_list))
-        aclk_query_threads_start(query_threads);
+        aclk_query_threads_start(query_threads, client);
 
-    // TODO of course this has to be later sent trough QUERY Threads
-    aclk_send_info_metadata(client, 0, localhost);
-    aclk_send_alarm_metadata(client, 0);
+    aclk_query_t query = aclk_query_new(METADATA_INFO);
+    query->data.metadata_info.host = localhost;
+    query->data.metadata_info.initial_on_connect = 1;
+    aclk_queue_query(query);
+    query = aclk_query_new(METADATA_ALARMS);
+    query->data.metadata_alarms.initial_on_connect = 1;
+    aclk_queue_query(query);
 }
 
 static inline void mqtt_connected_actions(mqtt_wss_client client)

@@ -30,6 +30,38 @@ static void aclk_send_message(mqtt_wss_client client, json_object *msg, const ch
 #endif
 }
 
+#define TOPIC_MAX_LEN 512
+#define V2_BIN_PAYLOAD_SEPARATOR "\x0D\x0A\x0D\x0A"
+static void aclk_send_message_with_bin_payload(mqtt_wss_client client, json_object *msg, const char *subtopic, const void *payload, size_t payload_len)
+{
+    char topic[TOPIC_MAX_LEN];
+    const char *str;
+    char *full_msg;
+    int len;
+
+    str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
+    len = strlen(str);
+
+    full_msg = mallocz(len + strlen(V2_BIN_PAYLOAD_SEPARATOR) + payload_len);
+
+    memcpy(full_msg, str, len);
+    memcpy(&full_msg[len], V2_BIN_PAYLOAD_SEPARATOR, strlen(V2_BIN_PAYLOAD_SEPARATOR));
+    len += strlen(V2_BIN_PAYLOAD_SEPARATOR);
+    memcpy(&full_msg[len], payload, payload_len);
+    len += payload_len;
+
+/* TODO
+#ifdef ACLK_LOG_CONVERSATION_DIR
+#define FN_MAX_LEN 1024
+    char filename[FN_MAX_LEN];
+    snprintf(filename, FN_MAX_LEN, ACLK_LOG_CONVERSATION_DIR "/%010d-tx.json", ACLK_GET_CONV_LOG_NEXT());
+    json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
+#endif */
+
+    mqtt_wss_publish(client, aclk_get_topic(subtopic, "864a1ca0-b537-4bae-b1aa-059663c21812" /* TODO */, topic, TOPIC_MAX_LEN), full_msg, len,  MQTT_WSS_PUB_QOS1);
+    freez(full_msg);
+}
+
 /*
  * Creates universal header common for all ACLK messages. User gets ownership of json object created.
  * Usually this is freed by send function after message has been sent.
@@ -210,6 +242,25 @@ void aclk_hello_msg(mqtt_wss_client client)
     aclk_send_message(client, msg, ACLK_METADATA_TOPIC);
 
     freez(msg_id);
+}
+
+void aclk_http_msg_v2(mqtt_wss_client client, const char *topic, const char *msg_id, usec_t t_exec, usec_t created, int http_code, const char *payload, size_t payload_len)
+{
+    json_object *tmp, *msg;
+
+    msg = create_hdr("http", msg_id, 0, 0, 2);
+
+    tmp = json_object_new_int64(t_exec);
+    json_object_object_add(msg, "t-exec", tmp);
+
+    tmp = json_object_new_int64(created);
+    json_object_object_add(msg, "t-rx", tmp);
+
+    tmp = json_object_new_int(http_code);
+    json_object_object_add(msg, "http-code", tmp);
+
+    aclk_send_message_with_bin_payload(client, msg, topic, payload, payload_len);
+    json_object_put(msg);
 }
 
 #ifndef __GNUC__

@@ -3,10 +3,20 @@
 #include "aclk_rx_msgs.h"
 
 #include "aclk_stats.h"
-#include "aclk_query.h"
+#include "aclk_query_queue.h"
 
 #define ACLK_V2_PAYLOAD_SEPARATOR "\x0D\x0A\x0D\x0A"
 #define ACLK_CLOUD_REQ_V2_PREFIX "GET /api/v1/"
+
+struct aclk_request {
+    char *type_id;
+    char *msg_id;
+    char *callback_topic;
+    char *payload;
+    int version;
+    int min_version;
+    int max_version;
+};
 
 int cloud_to_agent_parse(JSON_ENTRY *e)
 {
@@ -74,7 +84,7 @@ static inline int aclk_extract_v2_data(char *payload, char **data)
     return 0;
 }
 
-static inline int aclk_v2_payload_get_query(const char *payload, struct aclk_request *req)
+static inline int aclk_v2_payload_get_query(const char *payload, char **query_url)
 {
     const char *start, *end;
 
@@ -91,8 +101,8 @@ static inline int aclk_v2_payload_get_query(const char *payload, struct aclk_req
         return 1;
     }
 
-    req->payload = mallocz((end - start) + 1);
-    strncpyz(req->payload, start, end - start);
+    *query_url = mallocz((end - start) + 1);
+    strncpyz(*query_url, start, end - start);
 
     return 0;
 }
@@ -109,7 +119,7 @@ static int aclk_handle_cloud_request_v2(struct aclk_request *cloud_to_agent, cha
 {
     HTTP_CHECK_AGENT_INITIALIZED();
 
-    char *data;
+    aclk_query_t query;
 
     errno = 0;
     if (cloud_to_agent->version < ACLK_V_COMPRESSION) {
@@ -120,39 +130,40 @@ static int aclk_handle_cloud_request_v2(struct aclk_request *cloud_to_agent, cha
         return 1;
     }
 
-    if (unlikely(aclk_extract_v2_data(raw_payload, &data))) {
+    query = aclk_query_new(HTTP_API_V2);
+
+    if (unlikely(aclk_extract_v2_data(raw_payload, &query->data.http_api_v2.payload))) {
         error("Error extracting payload expected after the JSON dictionary.");
-        return 1;
+        goto error;
     }
 
-    if (unlikely(aclk_v2_payload_get_query(data, cloud_to_agent))) {
+    if (unlikely(aclk_v2_payload_get_query(query->data.http_api_v2.payload, &query->dedup_id))) {
         error("Could not extract payload from query");
-        freez(data);
-        return 1;
+        goto error;
     }
 
     if (unlikely(!cloud_to_agent->callback_topic)) {
         error("Missing callback_topic");
-        freez(data);
-        return 1;
+        goto error;
     }
 
     if (unlikely(!cloud_to_agent->msg_id)) {
         error("Missing msg_id");
-        freez(data);
-        return 1;
+        goto error;
     }
 
     // aclk_queue_query takes ownership of data pointer
-
-    // TODO
-/*    if (unlikely(aclk_queue_query(
-            cloud_to_agent->callback_topic, data, cloud_to_agent->msg_id, cloud_to_agent->payload, 0, 0,
-            ACLK_CMD_CLOUD_QUERY_2)))
-        debug(D_ACLK, "ACLK failed to queue incoming \"http\" message");*/
-
-    UNUSED(cloud_to_agent);
+    query->callback_topic = cloud_to_agent->callback_topic;
+    // for clarity and code readability as when we process the request
+    // it would be strange to get URL from `dedup_id`
+    query->data.http_api_v2.query = query->dedup_id;
+    query->msg_id = cloud_to_agent->msg_id;
+    aclk_queue_query(query);
     return 0;
+
+error:
+    aclk_query_free(query);
+    return 1;
 }
 
 // This handles `version` message from cloud used to negotiate

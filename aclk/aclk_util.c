@@ -64,7 +64,9 @@ int aclk_decode_base_url(char *url, char **aclk_hostname, int *aclk_port)
             port_end++;
         if (port_end - host_end > 6) {
             error("Port specified in %s is invalid", url);
-            return 0;
+            freez(*aclk_hostname);
+            *aclk_hostname = NULL;
+            return 1;
         }
         *aclk_port = atoi(&url[host_end+1]);
     }

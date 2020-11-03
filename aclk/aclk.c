@@ -138,8 +138,10 @@ static int wait_till_agent_claimed(void)
  * 
  * @return If non 0 returned irrecoverable error happened and ACLK should be terminated
  */
-static int wait_till_agent_claim_ready(char **aclk_hostname, int *aclk_port)
+static int wait_till_agent_claim_ready()
 {
+    int port;
+    char *hostname = NULL;
     while (!netdata_exit) {
         if (wait_till_agent_claimed())
             return 1;
@@ -152,7 +154,10 @@ static int wait_till_agent_claim_ready(char **aclk_hostname, int *aclk_port)
             return 1;
         }
 
-        if (aclk_decode_base_url(cloud_base_url, aclk_hostname, aclk_port)) {
+        // We just check configuration is valid here
+        // TODO make it without malloc/free
+        freez(hostname);
+        if (aclk_decode_base_url(cloud_base_url, &hostname, &port)) {
             error("Agent is claimed but the configuration is invalid, please fix");
             sleep(5);
             continue;
@@ -164,6 +169,7 @@ static int wait_till_agent_claim_ready(char **aclk_hostname, int *aclk_port)
         }
     }
 
+    freez(hostname);
     return 0;
 }
 
@@ -345,6 +351,61 @@ static void wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_t
     }
 }
 
+/* Attempts to make a connection to MQTT broker over WSS
+ * @param client instance of mqtt_wss_client
+ * @returns  0 - Successfull Connection
+ *          <0 - Irrecoverable Error -> Kill ACLK
+ *          >0 - netdata_exit
+ */
+#define CLOUD_BASE_URL_READ_RETRY 30
+static int aclk_attempt_to_connect(mqtt_wss_client client)
+{
+    char *aclk_hostname = NULL;
+    int aclk_port;
+
+    char *mqtt_otp_user = NULL;
+    char *mqtt_otp_pass = NULL;
+
+    while (!netdata_exit) {
+        char *cloud_base_url = appconfig_get(&cloud_config, CONFIG_SECTION_GLOBAL, "cloud base url", NULL);
+        if (cloud_base_url == NULL) {
+            error("Do not move the cloud base url out of post_conf_load!!");
+            return -1;
+        }
+
+        freez(aclk_hostname);
+        if (aclk_decode_base_url(cloud_base_url, &aclk_hostname, &aclk_port)) {
+            error("ACLK base URL configuration key could not be parsed. Will retry in %d seconds.", CLOUD_BASE_URL_READ_RETRY);
+            sleep(CLOUD_BASE_URL_READ_RETRY);
+            continue;
+        }
+#ifndef ACLK_DISABLE_CHALLENGE
+        aclk_get_mqtt_otp(aclk_private_key, aclk_hostname, aclk_port, &mqtt_otp_user, &mqtt_otp_pass);
+        struct mqtt_connect_params mqtt_conn_params = {
+            .clientid = mqtt_otp_user,
+            .username = mqtt_otp_user,
+            .password = mqtt_otp_pass
+        };
+        if (!mqtt_wss_connect(client, aclk_hostname, aclk_port, &mqtt_conn_params)) {
+#else
+        if (!mqtt_wss_connect(client, aclk_hostname, aclk_port, "anon", "anon")) {
+#endif
+            freez(aclk_hostname);
+            info("MQTTWSS connection succeeded");
+            mqtt_connected_actions(client);
+            return 0;
+        }
+
+        printf("Connect failed\n");
+        // TODO exponential something thing or other thing instead of 1
+        sleep(1);
+        printf("Attempting Reconnect\n");
+    }
+
+    freez(aclk_hostname);
+    return 1;
+}
+
 /**
  * Main agent cloud link thread
  *
@@ -364,12 +425,6 @@ void *aclk_main(void *ptr)
     struct aclk_query_threads query_threads;
     query_threads.thread_list = NULL;
 
-    char *aclk_hostname = NULL;
-    int aclk_port;
-
-    char *mqtt_otp_user = NULL;
-    char *mqtt_otp_pass = NULL;
-
     // This thread is unusual in that it cannot be cancelled by cancel_main_threads()
     // as it must notify the far end that it shutdown gracefully and avoid the LWT.
     netdata_thread_disable_cancelability();
@@ -379,13 +434,13 @@ void *aclk_main(void *ptr)
     static_thread->enabled = NETDATA_MAIN_THREAD_EXITED;
     return NULL;
 #endif
-    aclk_popcorn_check_bump();
+    aclk_popcorn_check_bump(); // start localhost popcorn timer
     query_threads.count = read_query_thread_count();
 
     if (wait_till_cloud_enabled())
         goto exit;
 
-    if (wait_till_agent_claim_ready(&aclk_hostname, &aclk_port))
+    if (wait_till_agent_claim_ready())
         goto exit;
 
     if (!(mqttwss_client = mqtt_wss_new("mqtt_wss", aclk_mqtt_wss_log_cb, msg_callback, puback_callback))) {
@@ -403,34 +458,19 @@ void *aclk_main(void *ptr)
             stats_thread);
     }
 
-    while (1) {
-#ifndef ACLK_DISABLE_CHALLENGE
-        aclk_get_mqtt_otp(aclk_private_key, aclk_hostname, aclk_port, &mqtt_otp_user, &mqtt_otp_pass);
-        struct mqtt_connect_params mqtt_conn_params = {
-            .clientid = mqtt_otp_user,
-            .username = mqtt_otp_user,
-            .password = mqtt_otp_pass
-        };
-        if (!mqtt_wss_connect(mqttwss_client, aclk_hostname, aclk_port, &mqtt_conn_params))
-            break;
-#else
-        if (!mqtt_wss_connect(mqttwss_client, aclk_hostname, aclk_port, "anon", "anon"))
-            break;
-#endif
-        printf("Connect failed\n");
-        // TODO exponential something thing or other thing instead of 1
-        sleep(1);
-        printf("Attempting Reconnect\n");
-    }
+    if(aclk_attempt_to_connect(mqttwss_client))
+        goto exit_full;
 
-    info("MQTTWSS connection succeeded");
-    mqtt_connected_actions(mqttwss_client);
-
+    // TODO
+    // warning this assumes the popcorning is relative short
+    // if that changes call mqtt_wss_service from within
+    // to keep OpenSSL, WSS and MQTT connection alive
     wait_popcorning_finishes(mqttwss_client, &query_threads);
 
     handle_connection(mqttwss_client);
 
 
+exit_full:
 // Tear Down
     QUERY_THREAD_WAKEUP_ALL;
 

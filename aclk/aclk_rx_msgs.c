@@ -247,6 +247,7 @@ void aclk_set_rx_handlers(int version)
 {
 // ACLK_NG ACLK version support starts at 2
 // TODO ACLK v3
+    UNUSED(version);
     aclk_incoming_msg_types = aclk_incoming_msg_types_compression;
 }
 

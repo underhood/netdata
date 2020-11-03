@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "aclk_query_queue.h"
+#include "aclk_query.h"
 
 static netdata_mutex_t aclk_query_queue_mutex = NETDATA_MUTEX_INITIALIZER;
 #define ACLK_QUEUE_LOCK netdata_mutex_lock(&aclk_query_queue_mutex)
@@ -14,7 +15,7 @@ static struct aclk_query_queue {
     .tail = NULL
 };
 
-int aclk_queue_query(aclk_query_t query)
+static inline int _aclk_queue_query(aclk_query_t query)
 {
     query->created = now_realtime_usec();
     ACLK_QUEUE_LOCK;
@@ -28,6 +29,15 @@ int aclk_queue_query(aclk_query_t query)
     aclk_query_queue.tail->next = query;
     ACLK_QUEUE_UNLOCK;
     return 0;
+
+}
+
+int aclk_queue_query(aclk_query_t query)
+{
+    int ret = _aclk_queue_query(query);
+    if(!ret)
+        QUERY_THREAD_WAKEUP;
+    return ret;
 }
 
 aclk_query_t aclk_queue_pop()

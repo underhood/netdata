@@ -248,13 +248,19 @@ static int read_query_thread_count()
     return threads;
 }
 
-static int handle_connection(mqtt_wss_client mqttwss_client)
+/* Keeps connection alive and handles all network comms.
+ * Returns on error or when netdata is shutting down.
+ * @param client instance of mqtt_wss_client
+ * @returns  0 - Netdata Exits
+ *          >0 - Error happened. Reconnect and start over.
+ */
+static int handle_connection(mqtt_wss_client client)
 {
     time_t last_periodic_query_wakeup = now_monotonic_sec();
     while (!netdata_exit) {
         // timeout 1000 to check at least once a second
         // for netdata_exit
-        if (mqtt_wss_service(mqttwss_client, 1000)){
+        if (mqtt_wss_service(client, 1000)){
             error("Connection Error or Dropped");
             return 1;
         }
@@ -326,7 +332,14 @@ static inline void mqtt_connected_actions(mqtt_wss_client client)
     aclk_hello_msg(client);
 }
 
-static void wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_threads *query_threads)
+/* Waits until agent is ready or needs to exit
+ * @param client instance of mqtt_wss_client
+ * @param query_threads pointer to aclk_query_threads
+ *        structure where to store data about started query threads
+ * @return  0 - Popcorning Finished - Agent STABLE,
+ *         !0 - netdata_exit
+ */
+static int wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_threads *query_threads)
 {
     time_t elapsed;
     int need_wait;
@@ -334,7 +347,7 @@ static void wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_t
         ACLK_SHARED_STATE_LOCK;
         if (likely(aclk_shared_state.agent_state != AGENT_INITIALIZING)) {
             ACLK_SHARED_STATE_UNLOCK;
-            return;
+            return 0;
         }
         elapsed = now_realtime_sec() - aclk_shared_state.last_popcorn_interrupt;
         if (elapsed > ACLK_STABLE_TIMEOUT) {
@@ -349,12 +362,13 @@ static void wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_t
         error("ACLK localhost popocorn wait %d seconds longer", need_wait);
         sleep(need_wait);
     }
+    return 1;
 }
 
 /* Attempts to make a connection to MQTT broker over WSS
  * @param client instance of mqtt_wss_client
- * @returns  0 - Successfull Connection
- *          <0 - Irrecoverable Error -> Kill ACLK
+ * @return  0 - Successfull Connection,
+ *          <0 - Irrecoverable Error -> Kill ACLK,
  *          >0 - netdata_exit
  */
 #define CLOUD_BASE_URL_READ_RETRY 30
@@ -458,17 +472,21 @@ void *aclk_main(void *ptr)
             stats_thread);
     }
 
-    if(aclk_attempt_to_connect(mqttwss_client))
-        goto exit_full;
+    // Keep reconnecting and talking until our time has come
+    // and the Grim Reaper (netdata_exit) calls
+    do {
+        if (aclk_attempt_to_connect(mqttwss_client))
+            goto exit_full;
 
-    // TODO
-    // warning this assumes the popcorning is relative short
-    // if that changes call mqtt_wss_service from within
-    // to keep OpenSSL, WSS and MQTT connection alive
-    wait_popcorning_finishes(mqttwss_client, &query_threads);
+        // TODO
+        // warning this assumes the popcorning is relative short
+        // if that changes call mqtt_wss_service from within
+        // to keep OpenSSL, WSS and MQTT connection alive
+        if (wait_popcorning_finishes(mqttwss_client, &query_threads))
+            goto exit_full;
 
-    handle_connection(mqttwss_client);
-
+        handle_connection(mqttwss_client);
+    } while (!netdata_exit);
 
 exit_full:
 // Tear Down

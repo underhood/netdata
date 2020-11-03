@@ -355,7 +355,7 @@ static int wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_th
             ACLK_SHARED_STATE_UNLOCK;
             error("ACLK localhost popocorn finished");
             localhost_popcorn_finish_actions(client, query_threads);
-            break;
+            return 0;
         }
         ACLK_SHARED_STATE_UNLOCK;
         need_wait = ACLK_STABLE_TIMEOUT - elapsed;

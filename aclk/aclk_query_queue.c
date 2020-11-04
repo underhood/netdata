@@ -2,6 +2,7 @@
 
 #include "aclk_query_queue.h"
 #include "aclk_query.h"
+#include "aclk_stats.h"
 
 static netdata_mutex_t aclk_query_queue_mutex = NETDATA_MUTEX_INITIALIZER;
 #define ACLK_QUEUE_LOCK netdata_mutex_lock(&aclk_query_queue_mutex)
@@ -17,6 +18,11 @@ static struct aclk_query_queue {
 
 static inline int _aclk_queue_query(aclk_query_t query)
 {
+    if (aclk_stats_enabled) {
+        ACLK_STATS_LOCK;
+        aclk_metrics_per_sample.queries_queued++;
+        ACLK_STATS_UNLOCK;
+    }
     query->created = now_realtime_usec();
     ACLK_QUEUE_LOCK;
     if (!aclk_query_queue.head) {

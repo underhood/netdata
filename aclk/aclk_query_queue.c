@@ -11,20 +11,22 @@ static netdata_mutex_t aclk_query_queue_mutex = NETDATA_MUTEX_INITIALIZER;
 static struct aclk_query_queue {
     aclk_query_t head;
     aclk_query_t tail;
+    int block_push;
 } aclk_query_queue = {
     .head = NULL,
-    .tail = NULL
+    .tail = NULL,
+    .block_push = 0
 };
 
 static inline int _aclk_queue_query(aclk_query_t query)
 {
-    if (aclk_stats_enabled) {
-        ACLK_STATS_LOCK;
-        aclk_metrics_per_sample.queries_queued++;
-        ACLK_STATS_UNLOCK;
-    }
     query->created = now_realtime_usec();
     ACLK_QUEUE_LOCK;
+    if (aclk_query_queue.block_push) {
+        ACLK_QUEUE_UNLOCK;
+        error("Query Queue is blocked from accepting new requests. This is normally the case when ACLK prepares to shutdown.");
+        return 1;
+    }
     if (!aclk_query_queue.head) {
         aclk_query_queue.head = query;
         aclk_query_queue.tail = query;
@@ -41,15 +43,28 @@ static inline int _aclk_queue_query(aclk_query_t query)
 int aclk_queue_query(aclk_query_t query)
 {
     int ret = _aclk_queue_query(query);
-    if(!ret)
+    if (!ret) {
+        if (aclk_stats_enabled) {
+            ACLK_STATS_LOCK;
+            aclk_metrics_per_sample.queries_queued++;
+            ACLK_STATS_UNLOCK;
+        }
         QUERY_THREAD_WAKEUP;
+    }
     return ret;
 }
 
 aclk_query_t aclk_queue_pop(void)
 {
     aclk_query_t ret;
+
     ACLK_QUEUE_LOCK;
+    if (aclk_query_queue.block_push) {
+        ACLK_QUEUE_UNLOCK;
+        error("Query Queue is blocked from accepting new requests. This is normally the case when ACLK prepares to shutdown.");
+        return NULL;
+    }
+
     ret = aclk_query_queue.head;
     if (!ret) {
         ACLK_QUEUE_UNLOCK;
@@ -93,4 +108,11 @@ void aclk_query_free(aclk_query_t query)
     freez(query->callback_topic);
     freez(query->msg_id);
     freez(query);
+}
+
+void aclk_queue_lock(void)
+{
+    ACLK_QUEUE_LOCK;
+    aclk_query_queue.block_push = 1;
+    ACLK_QUEUE_UNLOCK;
 }

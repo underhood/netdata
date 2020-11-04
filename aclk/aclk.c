@@ -39,7 +39,9 @@ struct aclk_shared_state aclk_shared_state = {
     .agent_state = AGENT_INITIALIZING,
     .last_popcorn_interrupt = 0,
     .version_neg = 0,
-    .version_neg_wait_till = 0
+    .version_neg_wait_till = 0,
+    .mqtt_shutdown_msg_id = -1,
+    .mqtt_shutdown_msg_rcvd = 0
 };
 
 void aclk_single_update_disable()
@@ -213,12 +215,21 @@ static void msg_callback(const char *topic, const void *msg, size_t msglen, int 
     if (strcmp(aclk_get_topic(ACLK_TOPICID_COMMAND), topic))
         error("Received message on unexpected topic %s", topic);
 
+    if (aclk_shared_state.mqtt_shutdown_msg_id > 0) {
+        error("Link is shutting down. Ignoring message.");
+        return;
+    }
+
     aclk_handle_cloud_message(cmsg);
 }
 
 static void puback_callback(uint16_t packet_id)
 {
     error("Got PUBACK for %d", (int)packet_id);
+    if (aclk_shared_state.mqtt_shutdown_msg_id == (int)packet_id) {
+        error("Got PUBACK for shutdown message. Can exit gracefully.");
+        aclk_shared_state.mqtt_shutdown_msg_rcvd = 1;
+    }
 }
 
 static int read_query_thread_count()
@@ -333,6 +344,29 @@ static int wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_th
         sleep(need_wait);
     }
     return 1;
+}
+
+void aclk_graceful_disconnect(mqtt_wss_client client)
+{
+    error("Preparing to Gracefully Shutdown the ACLK");
+    aclk_queue_lock();
+    aclk_queue_flush();
+    aclk_shared_state.mqtt_shutdown_msg_id = aclk_send_graceful_disconnect(client, "graceful");
+    time_t t = now_monotonic_sec();
+    while (!mqtt_wss_service(client, 100)) {
+        if (now_monotonic_sec() - t >= 2) {
+            error("Wasn't able to gracefully shutdown ACLK in time!");
+            break;
+        }
+        if (aclk_shared_state.mqtt_shutdown_msg_rcvd) {
+            error("MQTT disconnect message sent successfully");
+            break;
+        }
+    }
+    aclk_stats_upd_online(0);
+    // TODO VIP
+    //error("Attempting to Gracefully Shutdown MQTT/WSS connection");
+    //mqtt_wss_disconnect(client, 1000);
 }
 
 /* Attempts to make a connection to MQTT broker over WSS
@@ -467,9 +501,11 @@ void *aclk_main(void *ptr)
         if (wait_popcorning_finishes(mqttwss_client, &query_threads))
             goto exit_full;
 
-        if (handle_connection(mqttwss_client))
+        if (!handle_connection(mqttwss_client))
             aclk_stats_upd_online(0);
     } while (!netdata_exit);
+
+    aclk_graceful_disconnect(mqttwss_client);
 
 exit_full:
 // Tear Down

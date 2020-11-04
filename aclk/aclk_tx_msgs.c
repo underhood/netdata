@@ -8,7 +8,6 @@
 #pragma region aclk_tx_msgs helper functions
 #endif
 
-#define TOPIC_MAX_LEN 512
 static void aclk_send_message_subtopic(mqtt_wss_client client, json_object *msg, enum aclk_topics subtopic)
 {
     const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
@@ -20,6 +19,21 @@ static void aclk_send_message_subtopic(mqtt_wss_client client, json_object *msg,
     snprintf(filename, FN_MAX_LEN, ACLK_LOG_CONVERSATION_DIR "/%010d-tx.json", ACLK_GET_CONV_LOG_NEXT());
     json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
 #endif
+}
+
+static uint16_t aclk_send_message_subtopic_pid(mqtt_wss_client client, json_object *msg, enum aclk_topics subtopic)
+{
+    uint16_t packet_id;
+    const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
+
+    mqtt_wss_publish_pid(client, aclk_get_topic(subtopic), str, strlen(str),  MQTT_WSS_PUB_QOS1, &packet_id);
+#ifdef ACLK_LOG_CONVERSATION_DIR
+#define FN_MAX_LEN 1024
+    char filename[FN_MAX_LEN];
+    snprintf(filename, FN_MAX_LEN, ACLK_LOG_CONVERSATION_DIR "/%010d-tx.json", ACLK_GET_CONV_LOG_NEXT());
+    json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
+#endif
+    return packet_id;
 }
 
 static void aclk_send_message_topic(mqtt_wss_client client, json_object *msg, const char *topic)
@@ -300,6 +314,15 @@ json_object *aclk_generate_disconnect(const char *message)
     json_object_object_add(msg, "payload", tmp);
 
     return msg;
+}
+
+int aclk_send_graceful_disconnect(mqtt_wss_client client, const char *message)
+{
+    int pid;
+    json_object *msg = aclk_generate_disconnect(message);
+    pid = aclk_send_message_subtopic_pid(client, msg, ACLK_TOPICID_METADATA);
+    json_object_put(msg);
+    return pid;
 }
 
 #ifndef __GNUC__

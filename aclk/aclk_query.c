@@ -188,8 +188,6 @@ int aclk_query_process_msgs(struct aclk_query_thread *info)
     while ((query = aclk_queue_pop())) {
         for (int i = 0; aclk_query_handlers[i].type != UNKNOWN; i++) {
             if (aclk_query_handlers[i].type == query->type) {
-                //TODO only debug
-                error("Processing Queued Message of type: \"%s\"", aclk_query_handlers[i].name);
                 debug(D_ACLK, "Processing Queued Message of type: \"%s\"", aclk_query_handlers[i].name);
                 aclk_query_handlers[i].fnc(info->client, query);
                 aclk_query_free(query);

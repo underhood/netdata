@@ -239,6 +239,13 @@ void aclk_hello_msg(mqtt_wss_client client)
     tmp = json_object_new_int(ACLK_VERSION_MAX);
     json_object_object_add(msg, "max-version", tmp);
 
+#ifdef ACLK_NG
+    tmp = json_object_new_string("Next Generation");
+#else
+    tmp = json_object_new_string("Legacy");
+#endif
+    json_object_object_add(msg, "aclk-implementation", tmp);
+
     aclk_send_message(client, msg, ACLK_METADATA_TOPIC);
 
     freez(msg_id);

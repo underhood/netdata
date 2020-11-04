@@ -6,7 +6,11 @@
 // Optional features
 
 #ifdef ENABLE_ACLK
-#define FEAT_CLOUD "YES"
+#ifdef ACLK_NG
+#define FEAT_CLOUD "YES (Next Generation)"
+#else
+#define DEAT_CLOUD "YES (Legacy)"
+#endif
 #else
 #ifdef DISABLE_CLOUD
 #define FEAT_CLOUD "NO (by user request e.g. '--disable-cloud')"
@@ -194,7 +198,10 @@ void print_build_info(void) {
     printf("    libcrypto:               %s\n", FEAT_CRYPTO);
     printf("    libm:                    %s\n", FEAT_LIBM);
     printf("    LWS:                     %s\n", FEAT_LWS);
+#ifndef ACLK_NG
+    // LWS still used for challenge response for now temporarily
     printf("    mosquitto:               %s\n", FEAT_MOSQUITTO);
+#endif
     printf("    tcalloc:                 %s\n", FEAT_TCMALLOC);
     printf("    zlib:                    %s\n", FEAT_ZLIB);
 

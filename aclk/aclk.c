@@ -298,6 +298,7 @@ static inline void mqtt_connected_actions(mqtt_wss_client client)
     aclk_session_sec = now / USEC_PER_SEC;
     aclk_session_us = now % USEC_PER_SEC;
 
+    aclk_stats_upd_online(1);
     aclk_hello_msg(client);
 }
 
@@ -466,7 +467,8 @@ void *aclk_main(void *ptr)
         if (wait_popcorning_finishes(mqttwss_client, &query_threads))
             goto exit_full;
 
-        handle_connection(mqttwss_client);
+        if (handle_connection(mqttwss_client))
+            aclk_stats_upd_online(0);
     } while (!netdata_exit);
 
 exit_full:

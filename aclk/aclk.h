@@ -102,10 +102,4 @@ void aclk_dummy();
 #define aclk_del_collector(...) aclk_dummy()
 #define aclk_add_collector(...) aclk_dummy()
 
-#define ACLK_CHART_TOPIC "outbound/meta"
-#define ACLK_ALARMS_TOPIC "outbound/alarms"
-#define ACLK_METADATA_TOPIC "outbound/meta"
-#define ACLK_COMMAND_TOPIC "inbound/cmd"
-#define ACLK_TOPIC_STRUCTURE "/agent/%s"
-
 #endif /* ACLK_H */

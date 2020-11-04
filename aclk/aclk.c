@@ -225,7 +225,6 @@ static void msg_callback(const char *topic, const void *msg, size_t msglen, int 
 
 static void puback_callback(uint16_t packet_id)
 {
-    error("Got PUBACK for %d", (int)packet_id);
     if (aclk_shared_state.mqtt_shutdown_msg_id == (int)packet_id) {
         error("Got PUBACK for shutdown message. Can exit gracefully.");
         aclk_shared_state.mqtt_shutdown_msg_rcvd = 1;

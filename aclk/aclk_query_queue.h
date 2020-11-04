@@ -53,6 +53,7 @@ aclk_query_t aclk_query_new(aclk_query_type_t type);
 void aclk_query_free(aclk_query_t query);
 
 int aclk_queue_query(aclk_query_t query);
-aclk_query_t aclk_queue_pop();
+aclk_query_t aclk_queue_pop(void);
+void aclk_queue_flush(void);
 
 #endif /* NETDATA_ACLK_QUERY_QUEUE_H */

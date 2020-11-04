@@ -46,7 +46,7 @@ int aclk_queue_query(aclk_query_t query)
     return ret;
 }
 
-aclk_query_t aclk_queue_pop()
+aclk_query_t aclk_queue_pop(void)
 {
     aclk_query_t ret;
     ACLK_QUEUE_LOCK;
@@ -63,6 +63,15 @@ aclk_query_t aclk_queue_pop()
 
     ret->next = NULL;
     return ret;
+}
+
+void aclk_queue_flush(void)
+{
+    aclk_query_t query = aclk_queue_pop();
+    while (query) {
+        aclk_query_free(query);
+        query = aclk_queue_pop();
+    };
 }
 
 aclk_query_t aclk_query_new(aclk_query_type_t type)

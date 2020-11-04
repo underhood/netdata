@@ -4,10 +4,22 @@
 
 #include "libnetdata/libnetdata.h"
 
-// Helper functions which should not have any inside ACLK dependency
+// Helper stuff which should not have any further inside ACLK dependency
+// and are supposed not to be needed outside of ACLK
 
-const char *aclk_get_topic(const char *sub_topic, const char *agent_id, char *final_topic, int max_size);
 int aclk_decode_base_url(char *url, char **aclk_hostname, int *aclk_port);
+
+enum aclk_topics {
+    ACLK_TOPICID_CHART    = 0,
+    ACLK_TOPICID_ALARMS   = 1,
+    ACLK_TOPICID_METADATA = 2,
+    ACLK_TOPICID_COMMAND  = 3,
+};
+
+const char *aclk_get_topic(enum aclk_topics topic);
+// TODO
+// aclk_topics_reload //when claim id changes
+// aclk_topics_free
 
 #ifdef ACLK_LOG_CONVERSATION_DIR
 extern volatile int aclk_conversation_log_counter;

@@ -4,24 +4,34 @@
 #include "../daemon/common.h"
 #include "aclk_util.h"
 
-#define ACLK_THREAD_NAME "ACLK_Query"
-#define ACLK_CHART_TOPIC "outbound/meta"
-#define ACLK_ALARMS_TOPIC "outbound/alarms"
-#define ACLK_METADATA_TOPIC "outbound/meta"
-#define ACLK_COMMAND_TOPIC "inbound/cmd"
-
 #ifndef __GNUC__
 #pragma region aclk_tx_msgs helper functions
 #endif
 
 #define TOPIC_MAX_LEN 512
-static void aclk_send_message(mqtt_wss_client client, json_object *msg, const char *subtopic)
+static void aclk_send_message_subtopic(mqtt_wss_client client, json_object *msg, enum aclk_topics subtopic)
 {
-    char topic[TOPIC_MAX_LEN];
-    const char *str;
+    const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
 
-    str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
-    mqtt_wss_publish(client, aclk_get_topic(subtopic, "864a1ca0-b537-4bae-b1aa-059663c21812" /* TODO */, topic, TOPIC_MAX_LEN), str, strlen(str),  MQTT_WSS_PUB_QOS1);
+    mqtt_wss_publish(client, aclk_get_topic(subtopic), str, strlen(str),  MQTT_WSS_PUB_QOS1);
+#ifdef ACLK_LOG_CONVERSATION_DIR
+#define FN_MAX_LEN 1024
+    char filename[FN_MAX_LEN];
+    snprintf(filename, FN_MAX_LEN, ACLK_LOG_CONVERSATION_DIR "/%010d-tx.json", ACLK_GET_CONV_LOG_NEXT());
+    json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
+#endif
+}
+
+static void aclk_send_message_topic(mqtt_wss_client client, json_object *msg, const char *topic)
+{
+    if (unlikely(!topic || topic[0] != '/')) {
+        error ("Full topic required!");
+        return;
+    }
+
+    const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
+
+    mqtt_wss_publish(client, topic, str, strlen(str),  MQTT_WSS_PUB_QOS1);
 #ifdef ACLK_LOG_CONVERSATION_DIR
 #define FN_MAX_LEN 1024
     char filename[FN_MAX_LEN];
@@ -32,12 +42,16 @@ static void aclk_send_message(mqtt_wss_client client, json_object *msg, const ch
 
 #define TOPIC_MAX_LEN 512
 #define V2_BIN_PAYLOAD_SEPARATOR "\x0D\x0A\x0D\x0A"
-static void aclk_send_message_with_bin_payload(mqtt_wss_client client, json_object *msg, const char *subtopic, const void *payload, size_t payload_len)
+static void aclk_send_message_with_bin_payload(mqtt_wss_client client, json_object *msg, const char *topic, const void *payload, size_t payload_len)
 {
-    char topic[TOPIC_MAX_LEN];
     const char *str;
     char *full_msg;
     int len;
+
+    if (unlikely(!topic || topic[0] != '/')) {
+        error ("Full topic required!");
+        return;
+    }
 
     str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
     len = strlen(str);
@@ -58,7 +72,7 @@ static void aclk_send_message_with_bin_payload(mqtt_wss_client client, json_obje
     json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
 #endif */
 
-    mqtt_wss_publish(client, aclk_get_topic(subtopic, "864a1ca0-b537-4bae-b1aa-059663c21812" /* TODO */, topic, TOPIC_MAX_LEN), full_msg, len,  MQTT_WSS_PUB_QOS1);
+    mqtt_wss_publish(client, topic, full_msg, len,  MQTT_WSS_PUB_QOS1);
     freez(full_msg);
 }
 
@@ -171,7 +185,7 @@ void aclk_send_info_metadata(mqtt_wss_client client, int metadata_submitted, RRD
     tmp = json_tokener_parse(local_buffer->buffer);
     json_object_object_add(payload, "charts", tmp);
 
-    aclk_send_message(client, msg, ACLK_METADATA_TOPIC);
+    aclk_send_message_subtopic(client, msg, ACLK_TOPICID_METADATA);
 
     json_object_put(msg);
     freez(msg_id);
@@ -213,7 +227,7 @@ void aclk_send_alarm_metadata(mqtt_wss_client client, int metadata_submitted)
     tmp = json_tokener_parse(local_buffer->buffer);
     json_object_object_add(payload, "alarms-active", tmp);
 
-    aclk_send_message(client, msg, ACLK_ALARMS_TOPIC);
+    aclk_send_message_subtopic(client, msg, ACLK_TOPICID_ALARMS);
 
     freez(msg_id);
     buffer_free(local_buffer);
@@ -246,7 +260,7 @@ void aclk_hello_msg(mqtt_wss_client client)
 #endif
     json_object_object_add(msg, "aclk-implementation", tmp);
 
-    aclk_send_message(client, msg, ACLK_METADATA_TOPIC);
+    aclk_send_message_subtopic(client, msg, ACLK_TOPICID_METADATA);
 
     freez(msg_id);
 }

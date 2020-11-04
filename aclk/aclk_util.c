@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 
-#define ACLK_TOPIC_STRUCTURE "/agent/%s"
+#include "../daemon/common.h"
 
 #ifdef ACLK_LOG_CONVERSATION_DIR
 volatile int aclk_conversation_log_counter = 0;
@@ -19,23 +19,55 @@ int aclk_get_conv_log_next()
 #endif
 #endif
 
+#define ACLK_TOPIC_PREFIX "/agent/"
+
+struct aclk_topic {
+    const char *topic_suffix;
+    char *topic;
+};
+
+// This helps to cache finalized topics (assembled with claim_id)
+// to not have to alloc or create buffer and construct topic every
+// time message is sent as in old ACLK
+static struct aclk_topic aclk_topic_cache[] = {
+    { .topic_suffix = "outbound/meta",   .topic = NULL }, // ACLK_TOPICID_CHART
+    { .topic_suffix = "outbound/alarms", .topic = NULL }, // ACLK_TOPICID_ALARMS
+    { .topic_suffix = "outbound/meta",   .topic = NULL }, // ACLK_TOPICID_METADATA
+    { .topic_suffix = "inbound/cmd",     .topic = NULL }, // ACLK_TOPICID_COMMAND
+    { .topic_suffix = NULL,              .topic = NULL }
+};
+
+static inline void generate_topic_cache()
+{
+    struct aclk_topic *tc = aclk_topic_cache;
+    char *ptr;
+    if (unlikely(!tc->topic)) {
+        netdata_mutex_lock(&localhost->claimed_id_lock);
+        while(tc->topic_suffix) {
+            tc->topic = mallocz(strlen(ACLK_TOPIC_PREFIX) + (UUID_STR_LEN - 1) + 2 /* '/' and \0 */ + strlen(tc->topic_suffix));
+            ptr = tc->topic;
+            strcpy(ptr, ACLK_TOPIC_PREFIX);
+            ptr += strlen(ACLK_TOPIC_PREFIX);
+            strcpy(ptr, localhost->claimed_id);
+            ptr += (UUID_STR_LEN - 1);
+            *ptr++ = '/';
+            strcpy(ptr, tc->topic_suffix);
+            tc++;
+        }
+        netdata_mutex_unlock(&localhost->claimed_id_lock);
+    }
+}
+
 /*
  * Build a topic based on sub_topic and final_topic
  * if the sub topic starts with / assume that is an absolute topic
  *
  */
-const char *aclk_get_topic(const char *sub_topic, const char *agent_id, char *final_topic, int max_size)
+const char *aclk_get_topic(enum aclk_topics topic)
 {
-    int rc;
+    generate_topic_cache();
 
-    if (sub_topic && sub_topic[0] == '/')
-        return sub_topic;
-
-    rc = snprintf(final_topic, max_size, ACLK_TOPIC_STRUCTURE "/%s", agent_id, sub_topic);
-    if (unlikely(rc >= max_size))
-        error("Topic has been truncated to [%s] instead of [" ACLK_TOPIC_STRUCTURE "/%s]", final_topic, agent_id, sub_topic);
-
-    return final_topic;
+    return aclk_topic_cache[topic].topic;
 }
 
 int aclk_decode_base_url(char *url, char **aclk_hostname, int *aclk_port)

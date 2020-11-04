@@ -181,17 +181,11 @@ void aclk_mqtt_wss_log_cb(mqtt_wss_log_type_t log_type, const char* str)
     error(str);
 }
 
-#define STRNCMP_PTR_SHIFT(ptr, str) \
-    if(strncmp(ptr, str, strlen(str))) \
-        error("Received message on unexpected topic %s", topic); \
-    ptr+=strlen(str); \
-
 //TODO prevent big buffer on stack
 #define RX_MSGLEN_MAX 4096
 static void msg_callback(const char *topic, const void *msg, size_t msglen, int qos)
 {
     char cmsg[RX_MSGLEN_MAX];
-    const char *ptr = topic;
     size_t len = (msglen < RX_MSGLEN_MAX - 1) ? msglen : (RX_MSGLEN_MAX - 1);
 
     if (msglen > RX_MSGLEN_MAX - 1)
@@ -216,16 +210,7 @@ static void msg_callback(const char *topic, const void *msg, size_t msglen, int 
 
     debug(D_ACLK, "Got Message From Broker Topic \"%s\" QOS %d MSG: \"%s\"", topic, qos, cmsg);
 
-    // Check topic is what we expect
-    STRNCMP_PTR_SHIFT(ptr, "/agent/")
-
-    netdata_mutex_lock(&localhost->claimed_id_lock);
-    STRNCMP_PTR_SHIFT(ptr, localhost->claimed_id);
-    netdata_mutex_unlock(&localhost->claimed_id_lock);
-
-    STRNCMP_PTR_SHIFT(ptr, "/inbound/cmd");
-    // This should be the end of it
-    if (*ptr)
+    if (strcmp(aclk_get_topic(ACLK_TOPICID_COMMAND), topic))
         error("Received message on unexpected topic %s", topic);
 
     aclk_handle_cloud_message(cmsg);
@@ -291,30 +276,9 @@ inline static int aclk_popcorn_check_bump()
     return 0;
 }
 
-/*
- * Subscribe to a topic in the cloud
- * The final subscription will be in the form
- * /agent/claim_id/<sub_topic>
- */
-#define ACLK_MAX_TOPIC 255
-static int aclk_subscribe(mqtt_wss_client client, char *sub_topic, int qos)
-{
-    char topic[ACLK_MAX_TOPIC + 1];
-    const char *final_topic;
-
-    final_topic = aclk_get_topic(sub_topic, "864a1ca0-b537-4bae-b1aa-059663c21812" /* TODO */, topic, ACLK_MAX_TOPIC);
-    if (unlikely(!final_topic)) {
-        errno = 0;
-        error("Unable to build outgoing topic; truncated?");
-        return 1;
-    }
-
-    return mqtt_wss_subscribe(client, final_topic, qos);
-}
-
 static inline void localhost_popcorn_finish_actions(mqtt_wss_client client, struct aclk_query_threads *query_threads)
 {
-    aclk_subscribe(client, ACLK_COMMAND_TOPIC, 1);
+    mqtt_wss_subscribe(client, aclk_get_topic(ACLK_TOPICID_COMMAND), 1);
     if (unlikely(!query_threads->thread_list))
         aclk_query_threads_start(query_threads, client);
 

@@ -88,50 +88,6 @@ static void aclk_stats_latency(struct aclk_metrics_per_sample *per_sample)
 }
 #endif
 
-static void aclk_stats_write_q(struct aclk_metrics_per_sample *per_sample)
-{
-    static RRDSET *st = NULL;
-    static RRDDIM *rd_wq_add = NULL;
-    static RRDDIM *rd_wq_consumed = NULL;
-
-    if (unlikely(!st)) {
-        st = rrdset_create_localhost(
-            "netdata", "aclk_write_q", NULL, "aclk", NULL, "Write Queue Mosq->Libwebsockets", "kB/s",
-            "netdata", "stats", 200003, localhost->rrd_update_every, RRDSET_TYPE_AREA);
-
-        rd_wq_add = rrddim_add(st, "added", NULL, 1, 1024 * localhost->rrd_update_every, RRD_ALGORITHM_ABSOLUTE);
-        rd_wq_consumed = rrddim_add(st, "consumed", NULL, 1, -1024 * localhost->rrd_update_every, RRD_ALGORITHM_ABSOLUTE);
-    } else
-        rrdset_next(st);
-
-    rrddim_set_by_pointer(st, rd_wq_add, per_sample->write_q_added);
-    rrddim_set_by_pointer(st, rd_wq_consumed, per_sample->write_q_consumed);
-
-    rrdset_done(st);
-}
-
-static void aclk_stats_read_q(struct aclk_metrics_per_sample *per_sample)
-{
-    static RRDSET *st = NULL;
-    static RRDDIM *rd_rq_add = NULL;
-    static RRDDIM *rd_rq_consumed = NULL;
-
-    if (unlikely(!st)) {
-        st = rrdset_create_localhost(
-            "netdata", "aclk_read_q", NULL, "aclk", NULL, "Read Queue Libwebsockets->Mosq", "kB/s",
-            "netdata", "stats", 200004, localhost->rrd_update_every, RRDSET_TYPE_AREA);
-
-        rd_rq_add = rrddim_add(st, "added", NULL, 1, 1024 * localhost->rrd_update_every, RRD_ALGORITHM_ABSOLUTE);
-        rd_rq_consumed = rrddim_add(st, "consumed", NULL, 1, -1024 * localhost->rrd_update_every, RRD_ALGORITHM_ABSOLUTE);
-    } else
-        rrdset_next(st);
-
-    rrddim_set_by_pointer(st, rd_rq_add, per_sample->read_q_added);
-    rrddim_set_by_pointer(st, rd_rq_consumed, per_sample->read_q_consumed);
-
-    rrdset_done(st);
-}
-
 static void aclk_stats_cloud_req(struct aclk_metrics_per_sample *per_sample)
 {
     static RRDSET *st = NULL;
@@ -258,8 +214,6 @@ void *aclk_stats_main_thread(void *ptr)
 #ifdef NETDATA_INTERNAL_CHECKS
         aclk_stats_latency(&per_sample);
 #endif
-        aclk_stats_write_q(&per_sample);
-        aclk_stats_read_q(&per_sample);
 
         aclk_stats_cloud_req(&per_sample);
         aclk_stats_query_threads(aclk_queries_per_thread_sample);

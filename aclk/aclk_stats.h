@@ -42,12 +42,6 @@ extern struct aclk_metrics_per_sample {
     volatile uint32_t latency_count;
 #endif
 
-    volatile uint32_t write_q_added;
-    volatile uint32_t write_q_consumed;
-
-    volatile uint32_t read_q_added;
-    volatile uint32_t read_q_consumed;
-
     volatile uint32_t cloud_req_recvd;
     volatile uint32_t cloud_req_err;
 

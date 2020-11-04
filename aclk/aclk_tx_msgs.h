@@ -14,4 +14,6 @@ void aclk_hello_msg(mqtt_wss_client client);
 
 void aclk_http_msg_v2(mqtt_wss_client client, const char *topic, const char *msg_id, usec_t t_exec, usec_t created, int http_code, const char *payload, size_t payload_len);
 
+json_object *aclk_generate_disconnect(const char *message);
+
 #endif

@@ -349,6 +349,10 @@ static int aclk_attempt_to_connect(mqtt_wss_client client)
     char *mqtt_otp_user = NULL;
     char *mqtt_otp_pass = NULL;
 
+#ifndef ACLK_DISABLE_CHALLENGE
+    json_object *lwt;
+#endif
+
     while (!netdata_exit) {
         char *cloud_base_url = appconfig_get(&cloud_config, CONFIG_SECTION_GLOBAL, "cloud base url", NULL);
         if (cloud_base_url == NULL) {
@@ -364,11 +368,16 @@ static int aclk_attempt_to_connect(mqtt_wss_client client)
         }
 #ifndef ACLK_DISABLE_CHALLENGE
         aclk_get_mqtt_otp(aclk_private_key, aclk_hostname, aclk_port, &mqtt_otp_user, &mqtt_otp_pass);
+        lwt = aclk_generate_disconnect(NULL);
         struct mqtt_connect_params mqtt_conn_params = {
-            .clientid = mqtt_otp_user,
-            .username = mqtt_otp_user,
-            .password = mqtt_otp_pass
+            .clientid   = mqtt_otp_user,
+            .username   = mqtt_otp_user,
+            .password   = mqtt_otp_pass,
+            .will_topic = aclk_get_topic(ACLK_TOPICID_METADATA),
+            .will_msg   = json_object_to_json_string_ext(lwt, JSON_C_TO_STRING_PLAIN),
+            .will_flags = MQTT_WSS_PUB_QOS2
         };
+        mqtt_conn_params.will_msg_len = strlen(mqtt_conn_params.will_msg);
         if (!mqtt_wss_connect(client, aclk_hostname, aclk_port, &mqtt_conn_params)) {
 #else
         if (!mqtt_wss_connect(client, aclk_hostname, aclk_port, "anon", "anon")) {
@@ -384,6 +393,9 @@ static int aclk_attempt_to_connect(mqtt_wss_client client)
         sleep(1);
         printf("Attempting Reconnect\n");
     }
+#ifndef ACLK_DISABLE_CHALLENGE
+    json_object_put(lwt);
+#endif
 
     freez(aclk_hostname);
     return 1;

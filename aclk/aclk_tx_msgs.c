@@ -284,6 +284,24 @@ void aclk_http_msg_v2(mqtt_wss_client client, const char *topic, const char *msg
     json_object_put(msg);
 }
 
+/*
+ * Will generate disconnect message.
+ * @param message if NULL it will generate LWT message (unexpected).
+ *        Otherwise string pointed to by this parameter will be used as
+ *        reason.
+ */
+json_object *aclk_generate_disconnect(const char *message)
+{
+    json_object *tmp, *msg;
+
+    msg = create_hdr("disconnect", NULL, 0, 0, 2);
+
+    tmp = json_object_new_string(message ? message : "unexpected");
+    json_object_object_add(msg, "payload", tmp);
+
+    return msg;
+}
+
 #ifndef __GNUC__
 #pragma endregion
 #endif

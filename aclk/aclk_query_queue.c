@@ -25,6 +25,7 @@ static inline int _aclk_queue_query(aclk_query_t query)
     if (aclk_query_queue.block_push) {
         ACLK_QUEUE_UNLOCK;
         error("Query Queue is blocked from accepting new requests. This is normally the case when ACLK prepares to shutdown.");
+        aclk_query_free(query);
         return 1;
     }
     if (!aclk_query_queue.head) {

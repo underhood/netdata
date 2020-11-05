@@ -36,6 +36,7 @@ static inline int _aclk_queue_query(aclk_query_t query)
     }
     // TODO deduplication
     aclk_query_queue.tail->next = query;
+    aclk_query_queue.tail = query;
     ACLK_QUEUE_UNLOCK;
     return 0;
 

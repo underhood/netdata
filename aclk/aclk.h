@@ -89,6 +89,7 @@ void aclk_dummy();
 
 void aclk_alarm_reload(void);
 int aclk_update_alarm(RRDHOST *host, ALARM_ENTRY *ae);
+
 // TODO this is for bacward compatibility with ACLK legacy
 #define ACLK_CMD_CHART 1
 #define ACLK_CMD_CHARTDEL 0
@@ -96,7 +97,8 @@ int aclk_update_alarm(RRDHOST *host, ALARM_ENTRY *ae);
  * @param create 0 - if chart was deleted, other if chart created
  */
 int aclk_update_chart(RRDHOST *host, char *chart_name, int create);
-#define aclk_del_collector(...) aclk_dummy()
-#define aclk_add_collector(...) aclk_dummy()
+
+void aclk_add_collector(const char *hostname, const char *plugin_name, const char *module_name);
+void aclk_del_collector(const char *hostname, const char *plugin_name, const char *module_name);
 
 #endif /* ACLK_H */

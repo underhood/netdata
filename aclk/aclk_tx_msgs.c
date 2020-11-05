@@ -330,6 +330,20 @@ void aclk_chart_msg(mqtt_wss_client client, RRDHOST *host, const char *chart)
     json_object_put(msg);
 }
 
+void aclk_alarm_state_msg(mqtt_wss_client client, json_object *msg)
+{
+    // we create header here on purpose (and not send message with it already as `msg` param)
+    // one is version_neg is guaranteed to be done here
+    // other are timestamps etc. which in ACLK legacy would be wrong (because ACLK legacy
+    // send message with timestamps already to Query Queue they would be incorrect at time
+    // when query queue would get to send them)
+    json_object *obj = create_hdr("status-change", NULL, 0, 0, aclk_shared_state.version_neg);
+    json_object_object_add(obj, "payload", msg);
+
+    aclk_send_message_subtopic(client, obj, ACLK_TOPICID_ALARMS);
+    json_object_put(obj);
+}
+
 /*
  * Will generate disconnect message.
  * @param message if NULL it will generate LWT message (unexpected).

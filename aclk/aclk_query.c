@@ -18,8 +18,6 @@ typedef struct aclk_query_handler {
     int(*fnc)(mqtt_wss_client client, aclk_query_t query);
 } aclk_query_handler;
 
-
-
 static int info_metadata(mqtt_wss_client client, aclk_query_t query)
 {
     aclk_send_info_metadata(client,
@@ -179,13 +177,22 @@ static int chart_query(mqtt_wss_client client, aclk_query_t query)
     return 0;
 }
 
+static int alarm_state_update_query(mqtt_wss_client client, aclk_query_t query)
+{
+    aclk_alarm_state_msg(client, query->data.alarm_update);
+    // aclk_alarm_state_msg frees the json object including the header it generates
+    query->data.alarm_update = NULL;
+    return 0;
+}
+
 aclk_query_handler aclk_query_handlers[] = {
-    { .type = HTTP_API_V2,     .name = "http api request v2", .fnc = http_api_v2     },
-    { .type = METADATA_INFO,   .name = "info metadata",       .fnc = info_metadata   },
-    { .type = METADATA_ALARMS, .name = "alarms metadata",     .fnc = alarms_metadata },
-    { .type = CHART_NEW,       .name = "chart new",           .fnc = chart_query     },
-    { .type = CHART_DEL,       .name = "chart delete",        .fnc = info_metadata   },
-    { .type = UNKNOWN,         .name = NULL,                  .fnc = NULL            }
+    { .type = HTTP_API_V2,        .name = "http api request v2", .fnc = http_api_v2              },
+    { .type = ALARM_STATE_UPDATE, .name = "alarm state update",  .fnc = alarm_state_update_query },
+    { .type = METADATA_INFO,      .name = "info metadata",       .fnc = info_metadata            },
+    { .type = METADATA_ALARMS,    .name = "alarms metadata",     .fnc = alarms_metadata          },
+    { .type = CHART_NEW,          .name = "chart new",           .fnc = chart_query              },
+    { .type = CHART_DEL,          .name = "chart delete",        .fnc = info_metadata            },
+    { .type = UNKNOWN,            .name = NULL,                  .fnc = NULL                     }
 };
 
 /* Processes messages from queue. Compete for work with other threads

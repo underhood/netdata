@@ -106,6 +106,9 @@ void aclk_query_free(aclk_query_t query)
 
     if (query->type == CHART_NEW)
         freez(query->data.chart_add_del.chart_name);
+    
+    if (query->type == ALARM_STATE_UPDATE && query->data.alarm_update)
+        json_object_put(query->data.alarm_update);
 
     freez(query->dedup_id);
     freez(query->callback_topic);

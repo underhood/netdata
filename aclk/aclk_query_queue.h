@@ -12,7 +12,8 @@ typedef enum {
     METADATA_ALARMS,
     HTTP_API_V2,
     CHART_NEW,
-    CHART_DEL
+    CHART_DEL,
+    ALARM_STATE_UPDATE
 } aclk_query_type_t;
 
 struct aclk_query_metadata {
@@ -54,6 +55,7 @@ struct aclk_query {
         struct aclk_query_metadata metadata_alarms;
         struct aclk_query_http_api_v2 http_api_v2;
         struct aclk_query_chart_add_del chart_add_del;
+        json_object *alarm_update;
     } data;
 };
 

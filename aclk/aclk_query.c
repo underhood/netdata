@@ -195,26 +195,33 @@ aclk_query_handler aclk_query_handlers[] = {
     { .type = UNKNOWN,            .name = NULL,                  .fnc = NULL                     }
 };
 
+
+static void aclk_query_process_msg(struct aclk_query_thread *info, aclk_query_t query)
+{
+    for (int i = 0; aclk_query_handlers[i].type != UNKNOWN; i++) {
+        if (aclk_query_handlers[i].type == query->type) {
+            debug(D_ACLK, "Processing Queued Message of type: \"%s\"", aclk_query_handlers[i].name);
+            aclk_query_handlers[i].fnc(info->client, query);
+            aclk_query_free(query);
+            if (aclk_stats_enabled) {
+                ACLK_STATS_LOCK;
+                aclk_metrics_per_sample.queries_dispatched++;
+                aclk_queries_per_thread[info->idx]++;
+                ACLK_STATS_UNLOCK;
+            }
+            return;
+        }
+    }
+    fatal("Unknown query in query queue. %u", query->type);
+}
+
 /* Processes messages from queue. Compete for work with other threads
  */
 int aclk_query_process_msgs(struct aclk_query_thread *info)
 {
     aclk_query_t query;
-    while ((query = aclk_queue_pop())) {
-        for (int i = 0; aclk_query_handlers[i].type != UNKNOWN; i++) {
-            if (aclk_query_handlers[i].type == query->type) {
-                debug(D_ACLK, "Processing Queued Message of type: \"%s\"", aclk_query_handlers[i].name);
-                aclk_query_handlers[i].fnc(info->client, query);
-                aclk_query_free(query);
-                if (aclk_stats_enabled) {
-                    ACLK_STATS_LOCK;
-                    aclk_metrics_per_sample.queries_dispatched++;
-                    aclk_queries_per_thread[info->idx]++;
-                    ACLK_STATS_UNLOCK;
-                }
-            }
-        }
-    }
+    while ((query = aclk_queue_pop()))
+        aclk_query_process_msg(info, query);
 
     return 0;
 }

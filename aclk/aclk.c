@@ -527,6 +527,18 @@ exit:
 // fix this in both old and new ACLK
 extern void health_alarm_entry2json_nolock(BUFFER *wb, ALARM_ENTRY *ae, RRDHOST *host);
 
+void aclk_alarm_reload(void)
+{
+    ACLK_SHARED_STATE_LOCK;
+    if (unlikely(aclk_shared_state.agent_state == AGENT_INITIALIZING)) {
+        ACLK_SHARED_STATE_UNLOCK;
+        return;
+    }
+    ACLK_SHARED_STATE_UNLOCK;
+
+    aclk_queue_query(aclk_query_new(METADATA_ALARMS));
+}
+
 int aclk_update_alarm(RRDHOST *host, ALARM_ENTRY *ae)
 {
     BUFFER *local_buffer;

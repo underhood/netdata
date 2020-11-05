@@ -86,7 +86,8 @@ const char *aclk_get_proxy(ACLK_PROXY_TYPE *type);
 void aclk_dummy();
 
 #define aclk_wss_set_proxy(...) aclk_dummy()
-#define aclk_alarm_reload(...) aclk_dummy()
+
+void aclk_alarm_reload(void);
 int aclk_update_alarm(RRDHOST *host, ALARM_ENTRY *ae);
 // TODO this is for bacward compatibility with ACLK legacy
 #define ACLK_CMD_CHART 1

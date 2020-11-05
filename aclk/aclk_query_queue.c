@@ -104,6 +104,9 @@ void aclk_query_free(aclk_query_t query)
             freez(query->data.http_api_v2.query);
     }
 
+    if (query->type == CHART_NEW)
+        freez(query->data.chart_add_del.chart_name);
+
     freez(query->dedup_id);
     freez(query->callback_topic);
     freez(query->msg_id);

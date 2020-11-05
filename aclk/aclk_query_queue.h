@@ -10,12 +10,19 @@ typedef enum {
     UNKNOWN,
     METADATA_INFO,
     METADATA_ALARMS,
-    HTTP_API_V2
+    HTTP_API_V2,
+    CHART_NEW,
+    CHART_DEL
 } aclk_query_type_t;
 
 struct aclk_query_metadata {
     RRDHOST *host;
     int initial_on_connect;
+};
+
+struct aclk_query_chart_add_del {
+    RRDHOST *host;
+    char* chart_name;
 };
 
 struct aclk_query_http_api_v2 {
@@ -46,6 +53,7 @@ struct aclk_query {
         struct aclk_query_metadata metadata_info;
         struct aclk_query_metadata metadata_alarms;
         struct aclk_query_http_api_v2 http_api_v2;
+        struct aclk_query_chart_add_del chart_add_del;
     } data;
 };
 

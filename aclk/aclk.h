@@ -51,16 +51,6 @@ extern netdata_mutex_t aclk_shared_state_mutex;
 #define ACLK_SHARED_STATE_LOCK netdata_mutex_lock(&aclk_shared_state_mutex)
 #define ACLK_SHARED_STATE_UNLOCK netdata_mutex_unlock(&aclk_shared_state_mutex)
 
-typedef enum aclk_cmd {
-    ACLK_CMD_CLOUD,
-    ACLK_CMD_ONCONNECT,
-    ACLK_CMD_INFO,
-    ACLK_CMD_CHART,
-    ACLK_CMD_CHARTDEL,
-    ACLK_CMD_ALARM,
-    ACLK_CMD_CLOUD_QUERY_2
-} ACLK_CMD;
-
 typedef enum aclk_agent_state {
     AGENT_INITIALIZING,
     AGENT_STABLE
@@ -98,7 +88,13 @@ void aclk_dummy();
 #define aclk_wss_set_proxy(...) aclk_dummy()
 #define aclk_alarm_reload(...) aclk_dummy()
 #define aclk_update_alarm(...) aclk_dummy()
-#define aclk_update_chart(...) aclk_dummy()
+// TODO this is for bacward compatibility with ACLK legacy
+#define ACLK_CMD_CHART 1
+#define ACLK_CMD_CHARTDEL 0
+/* Informs ACLK about created/deleted chart
+ * @param create 0 - if chart was deleted, other if chart created
+ */
+int aclk_update_chart(RRDHOST *host, char *chart_name, int create);
 #define aclk_del_collector(...) aclk_dummy()
 #define aclk_add_collector(...) aclk_dummy()
 

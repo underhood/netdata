@@ -522,3 +522,23 @@ exit:
     static_thread->enabled = NETDATA_MAIN_THREAD_EXITED;
     return NULL;
 }
+
+int aclk_update_chart(RRDHOST *host, char *chart_name, int create)
+{
+    struct aclk_query *query;
+
+    if (aclk_popcorn_check_bump())
+        return 0;
+
+    query = aclk_query_new(create ? CHART_NEW : CHART_DEL);
+    if(create) {
+        query->data.chart_add_del.host = host;
+        query->data.chart_add_del.chart_name = strdupz(chart_name);
+    } else {
+        query->data.metadata_info.host = host;
+        query->data.metadata_info.initial_on_connect = 0;
+    }
+
+    aclk_queue_query(query);
+    return 0;
+}

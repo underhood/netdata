@@ -44,12 +44,12 @@ int aclk_queue_query(aclk_query_t query)
 {
     int ret = _aclk_queue_query(query);
     if (!ret) {
+        QUERY_THREAD_WAKEUP;
         if (aclk_stats_enabled) {
             ACLK_STATS_LOCK;
             aclk_metrics_per_sample.queries_queued++;
             ACLK_STATS_UNLOCK;
         }
-        QUERY_THREAD_WAKEUP;
     }
     return ret;
 }

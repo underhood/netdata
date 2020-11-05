@@ -331,7 +331,7 @@ static int wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_th
             return 0;
         }
         elapsed = now_realtime_sec() - aclk_shared_state.last_popcorn_interrupt;
-        if (elapsed > ACLK_STABLE_TIMEOUT) {
+        if (elapsed >= ACLK_STABLE_TIMEOUT) {
             aclk_shared_state.agent_state = AGENT_STABLE;
             ACLK_SHARED_STATE_UNLOCK;
             error("ACLK localhost popocorn finished");

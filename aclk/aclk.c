@@ -410,7 +410,8 @@ static int aclk_attempt_to_connect(mqtt_wss_client client)
             .password   = mqtt_otp_pass,
             .will_topic = aclk_get_topic(ACLK_TOPICID_METADATA),
             .will_msg   = json_object_to_json_string_ext(lwt, JSON_C_TO_STRING_PLAIN),
-            .will_flags = MQTT_WSS_PUB_QOS2
+            .will_flags = MQTT_WSS_PUB_QOS2,
+            .keep_alive = 60
         };
         mqtt_conn_params.will_msg_len = strlen(mqtt_conn_params.will_msg);
         if (!mqtt_wss_connect(client, aclk_hostname, aclk_port, &mqtt_conn_params)) {

@@ -37,7 +37,19 @@ static struct aclk_topic aclk_topic_cache[] = {
     { .topic_suffix = NULL,              .topic = NULL }
 };
 
-static inline void generate_topic_cache()
+void free_topic_cache(void)
+{
+    struct aclk_topic *tc = aclk_topic_cache;
+    while (tc->topic_suffix) {
+        if (tc->topic) {
+            freez(tc->topic);
+            tc->topic = NULL;
+        }
+        tc++;
+    }
+}
+
+static inline void generate_topic_cache(void)
 {
     struct aclk_topic *tc = aclk_topic_cache;
     char *ptr;

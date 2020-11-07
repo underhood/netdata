@@ -17,9 +17,9 @@ enum aclk_topics {
 };
 
 const char *aclk_get_topic(enum aclk_topics topic);
+void free_topic_cache(void);
 // TODO
 // aclk_topics_reload //when claim id changes
-// aclk_topics_free
 
 #ifdef ACLK_LOG_CONVERSATION_DIR
 extern volatile int aclk_conversation_log_counter;

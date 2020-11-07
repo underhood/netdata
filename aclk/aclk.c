@@ -520,6 +520,7 @@ exit_full:
         freez(stats_thread->thread);
         freez(stats_thread);
     }
+    free_topic_cache();
 exit:
     static_thread->enabled = NETDATA_MAIN_THREAD_EXITED;
     return NULL;

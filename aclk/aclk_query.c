@@ -291,6 +291,6 @@ void aclk_query_threads_cleanup(struct aclk_query_threads *query_threads)
         }
         freez(query_threads->thread_list);
     }
-
+    aclk_queue_lock();
     aclk_queue_flush();
 }

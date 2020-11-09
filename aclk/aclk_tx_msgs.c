@@ -3,6 +3,7 @@
 #include "aclk_tx_msgs.h"
 #include "../daemon/common.h"
 #include "aclk_util.h"
+#include "aclk_stats.h"
 
 #ifndef __GNUC__
 #pragma region aclk_tx_msgs helper functions
@@ -10,9 +11,13 @@
 
 static void aclk_send_message_subtopic(mqtt_wss_client client, json_object *msg, enum aclk_topics subtopic)
 {
+    uint16_t packet_id;
     const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
 
-    mqtt_wss_publish(client, aclk_get_topic(subtopic), str, strlen(str),  MQTT_WSS_PUB_QOS1);
+    mqtt_wss_publish_pid(client, aclk_get_topic(subtopic), str, strlen(str),  MQTT_WSS_PUB_QOS1, &packet_id);
+#ifdef NETDATA_INTERNAL_CHECKS
+    aclk_stats_msg_published(packet_id);
+#endif
 #ifdef ACLK_LOG_CONVERSATION_DIR
 #define FN_MAX_LEN 1024
     char filename[FN_MAX_LEN];
@@ -27,6 +32,9 @@ static uint16_t aclk_send_message_subtopic_pid(mqtt_wss_client client, json_obje
     const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
 
     mqtt_wss_publish_pid(client, aclk_get_topic(subtopic), str, strlen(str),  MQTT_WSS_PUB_QOS1, &packet_id);
+#ifdef NETDATA_INTERNAL_CHECKS
+    aclk_stats_msg_published(packet_id);
+#endif
 #ifdef ACLK_LOG_CONVERSATION_DIR
 #define FN_MAX_LEN 1024
     char filename[FN_MAX_LEN];
@@ -36,6 +44,7 @@ static uint16_t aclk_send_message_subtopic_pid(mqtt_wss_client client, json_obje
     return packet_id;
 }
 
+/* UNUSED now but can be used soon MVP1?
 static void aclk_send_message_topic(mqtt_wss_client client, json_object *msg, const char *topic)
 {
     if (unlikely(!topic || topic[0] != '/')) {
@@ -46,6 +55,9 @@ static void aclk_send_message_topic(mqtt_wss_client client, json_object *msg, co
     const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
 
     mqtt_wss_publish(client, topic, str, strlen(str),  MQTT_WSS_PUB_QOS1);
+#ifdef NETDATA_INTERNAL_CHECKS
+    aclk_stats_msg_published();
+#endif
 #ifdef ACLK_LOG_CONVERSATION_DIR
 #define FN_MAX_LEN 1024
     char filename[FN_MAX_LEN];
@@ -53,11 +65,13 @@ static void aclk_send_message_topic(mqtt_wss_client client, json_object *msg, co
     json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
 #endif
 }
+*/
 
 #define TOPIC_MAX_LEN 512
 #define V2_BIN_PAYLOAD_SEPARATOR "\x0D\x0A\x0D\x0A"
 static void aclk_send_message_with_bin_payload(mqtt_wss_client client, json_object *msg, const char *topic, const void *payload, size_t payload_len)
 {
+    uint16_t packet_id;
     const char *str;
     char *full_msg;
     int len;
@@ -86,7 +100,10 @@ static void aclk_send_message_with_bin_payload(mqtt_wss_client client, json_obje
     json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
 #endif */
 
-    mqtt_wss_publish(client, topic, full_msg, len,  MQTT_WSS_PUB_QOS1);
+    mqtt_wss_publish_pid(client, topic, full_msg, len,  MQTT_WSS_PUB_QOS1, &packet_id);
+#ifdef NETDATA_INTERNAL_CHECKS
+    aclk_stats_msg_published(packet_id);
+#endif
     freez(full_msg);
 }
 

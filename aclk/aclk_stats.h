@@ -56,4 +56,9 @@ void *aclk_stats_main_thread(void *ptr);
 void aclk_stats_thread_cleanup();
 void aclk_stats_upd_online(int online);
 
+#ifdef NETDATA_INTERNAL_CHECKS
+void aclk_stats_msg_published(uint16_t id);
+void aclk_stats_msg_puback(uint16_t id);
+#endif /* NETDATA_INTERNAL_CHECKS */
+
 #endif /* NETDATA_ACLK_STATS_H */

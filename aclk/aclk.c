@@ -524,6 +524,7 @@ exit_full:
         freez(stats_thread);
     }
     free_topic_cache();
+    mqtt_wss_destroy(mqttwss_client);
 exit:
     static_thread->enabled = NETDATA_MAIN_THREAD_EXITED;
     return NULL;

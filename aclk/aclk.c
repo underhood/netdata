@@ -364,9 +364,9 @@ void aclk_graceful_disconnect(mqtt_wss_client client)
         }
     }
     aclk_stats_upd_online(0);
-    // TODO VIP
-    //error("Attempting to Gracefully Shutdown MQTT/WSS connection");
-    //mqtt_wss_disconnect(client, 1000);
+
+    error("Attempting to Gracefully Shutdown MQTT/WSS connection");
+    mqtt_wss_disconnect(client, 1000);
 }
 
 /* Attempts to make a connection to MQTT broker over WSS

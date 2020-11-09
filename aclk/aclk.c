@@ -290,12 +290,8 @@ inline static int aclk_popcorn_check_bump()
     return 0;
 }
 
-static inline void localhost_popcorn_finish_actions(mqtt_wss_client client, struct aclk_query_threads *query_threads)
+static inline void queue_connect_payloads(void)
 {
-    mqtt_wss_subscribe(client, aclk_get_topic(ACLK_TOPICID_COMMAND), 1);
-    if (unlikely(!query_threads->thread_list))
-        aclk_query_threads_start(query_threads, client);
-
     aclk_query_t query = aclk_query_new(METADATA_INFO);
     query->data.metadata_info.host = localhost;
     query->data.metadata_info.initial_on_connect = 1;
@@ -312,8 +308,16 @@ static inline void mqtt_connected_actions(mqtt_wss_client client)
     aclk_session_sec = now / USEC_PER_SEC;
     aclk_session_us = now % USEC_PER_SEC;
 
+    mqtt_wss_subscribe(client, aclk_get_topic(ACLK_TOPICID_COMMAND), 1);
+
     aclk_stats_upd_online(1);
     aclk_hello_msg(client);
+    ACLK_SHARED_STATE_LOCK;
+    if (aclk_shared_state.agent_state != AGENT_INITIALIZING) {
+        error("Sending `connect` payload immediatelly as popcorning was finished already.");
+        queue_connect_payloads();
+    }
+    ACLK_SHARED_STATE_UNLOCK;
 }
 
 /* Waits until agent is ready or needs to exit
@@ -338,7 +342,9 @@ static int wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_th
             aclk_shared_state.agent_state = AGENT_STABLE;
             ACLK_SHARED_STATE_UNLOCK;
             error("ACLK localhost popocorn finished");
-            localhost_popcorn_finish_actions(client, query_threads);
+            if (unlikely(!query_threads->thread_list))
+                aclk_query_threads_start(query_threads, client);
+            queue_connect_payloads();
             return 0;
         }
         ACLK_SHARED_STATE_UNLOCK;

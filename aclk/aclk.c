@@ -260,7 +260,7 @@ static int handle_connection(mqtt_wss_client client)
     while (!netdata_exit) {
         // timeout 1000 to check at least once a second
         // for netdata_exit
-        if (mqtt_wss_service(client, 1000)){
+        if (mqtt_wss_service(client, 1000) < 0){
             error("Connection Error or Dropped");
             return 1;
         }

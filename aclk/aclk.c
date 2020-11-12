@@ -311,6 +311,7 @@ static inline void mqtt_connected_actions(mqtt_wss_client client)
     mqtt_wss_subscribe(client, aclk_get_topic(ACLK_TOPICID_COMMAND), 1);
 
     aclk_stats_upd_online(1);
+    aclk_connected = 1;
     aclk_hello_msg(client);
     ACLK_SHARED_STATE_LOCK;
     if (aclk_shared_state.agent_state != AGENT_INITIALIZING) {
@@ -373,6 +374,7 @@ void aclk_graceful_disconnect(mqtt_wss_client client)
         }
     }
     aclk_stats_upd_online(0);
+    aclk_connected = 0;
 
     error("Attempting to Gracefully Shutdown MQTT/WSS connection");
     mqtt_wss_disconnect(client, 1000);
@@ -511,8 +513,10 @@ void *aclk_main(void *ptr)
         if (wait_popcorning_finishes(mqttwss_client, &query_threads))
             goto exit_full;
 
-        if (!handle_connection(mqttwss_client))
+        if (!handle_connection(mqttwss_client)) {
             aclk_stats_upd_online(0);
+            aclk_connected = 0;
+        }
     } while (!netdata_exit);
 
     aclk_graceful_disconnect(mqttwss_client);

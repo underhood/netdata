@@ -631,7 +631,7 @@ if test "${enable_cloud}" != "no"; then
     AC_DEFINE([ENABLE_ACLK], [1], [netdata ACLK])
     enable_aclk="yes"
     AC_MSG_RESULT([yes])
-    OPTIONAL_MQTT_WSS_CFLAGS="-Imqtt_websockets/src/include"
+    OPTIONAL_MQTT_WSS_CFLAGS="-Imqtt_websockets/src/include -Iexternaldeps/libwebsockets/include"
 fi
 AM_CONDITIONAL([ACLK_NG], [test "${aclk_ng}" = "yes"])
 

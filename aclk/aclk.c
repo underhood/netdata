@@ -425,7 +425,11 @@ static int aclk_attempt_to_connect(mqtt_wss_client client)
             .keep_alive = 60
         };
         mqtt_conn_params.will_msg_len = strlen(mqtt_conn_params.will_msg);
-        if (!mqtt_wss_connect(client, aclk_hostname, aclk_port, &mqtt_conn_params)) {
+#ifdef ACLK_SSL_ALLOW_SELF_SIGNED
+        if (!mqtt_wss_connect(client, aclk_hostname, aclk_port, &mqtt_conn_params, MQTT_WSS_SSL_ALLOW_SELF_SIGNED)) {
+#else
+        if (!mqtt_wss_connect(client, aclk_hostname, aclk_port, &mqtt_conn_params, MQTT_WSS_SSL_CERT_CHECK_FULL)) {
+#endif
 #else
         if (!mqtt_wss_connect(client, aclk_hostname, aclk_port, "anon", "anon")) {
 #endif

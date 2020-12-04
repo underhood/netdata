@@ -63,6 +63,7 @@
 #define FEAT_LIBCAP "NO"
 #endif
 
+#ifndef ACLK_NG
 #ifdef ACLK_NO_LIBMOSQ
 #define FEAT_MOSQUITTO "NO"
 #else
@@ -81,6 +82,7 @@
 #define FEAT_LWS "YES shared-lib"
 #endif
 #endif
+#endif /* ACLK_NG */
 
 #ifdef NETDATA_WITH_ZLIB
 #define FEAT_ZLIB "YES"
@@ -204,12 +206,12 @@ void print_build_info(void) {
     printf("    libcap:                  %s\n", FEAT_LIBCAP);
     printf("    libcrypto:               %s\n", FEAT_CRYPTO);
     printf("    libm:                    %s\n", FEAT_LIBM);
+#ifndef ACLK_NG
 #if defined(ENABLE_ACLK)
     printf("    LWS:                     %s v%d.%d.%d\n", FEAT_LWS, LWS_LIBRARY_VERSION_MAJOR, LWS_LIBRARY_VERSION_MINOR, LWS_LIBRARY_VERSION_PATCH);
 #else
     printf("    LWS:                     %s\n", FEAT_LWS);
 #endif
-#ifndef ACLK_NG
     // LWS still used for challenge response for now temporarily // TODO
     printf("    mosquitto:               %s\n", FEAT_MOSQUITTO);
 #endif

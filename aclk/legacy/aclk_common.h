@@ -29,6 +29,7 @@ extern netdata_mutex_t aclk_shared_state_mutex;
 // Define ACLK Feature Version Boundaries Here
 #define ACLK_V_COMPRESSION   2
 #define ACLK_V_CHILDRENSTATE 3
+#define ACLK_V_CHILD_HDR     4
 
 #define ACLK_IS_HOST_INITIALIZING(host) (host->aclk_state.state == ACLK_HOST_INITIALIZING)
 #define ACLK_IS_HOST_POPCORNING(host) (ACLK_IS_HOST_INITIALIZING(host) && host->aclk_state.t_last_popcorn_update)

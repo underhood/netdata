@@ -1503,18 +1503,19 @@ void aclk_host_state_update(RRDHOST *host, ACLK_CMD cmd)
 #warning "This check became unnecessary. Remove"
 #endif
 
-    if (unlikely(aclk_host_initializing(localhost)))
-        return;
-
     switch (cmd) {
         case ACLK_CMD_CHILD_CONNECT:
             debug(D_ACLK, "Child Connected %s %s.", host->hostname, host->machine_guid);
             aclk_start_host_popcorning(host);
+            if (unlikely(aclk_host_initializing(localhost)))
+                return;
             aclk_queue_query("add_child", host, NULL, NULL, 0, 1, ACLK_CMD_CHILD_CONNECT);
             break;
         case ACLK_CMD_CHILD_DISCONNECT:
             debug(D_ACLK, "Child Disconnected %s %s.", host->hostname, host->machine_guid);
             aclk_stop_host_popcorning(host);
+            if (unlikely(aclk_host_initializing(localhost)))
+                return;
             aclk_queue_query("del_child", host, NULL, NULL, 0, 1, ACLK_CMD_CHILD_DISCONNECT);
             break;
         default:

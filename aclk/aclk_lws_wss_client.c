@@ -413,6 +413,7 @@ static int aclk_lws_wss_callback(struct lws *wsi, enum lws_callback_reasons reas
     int retval = 0;
     static int lws_shutting_down = 0;
     int i;
+    int fd;
 
     for (i = ACLK_LWS_CALLBACK_HISTORY - 1; i > 0; i--)
         engine_instance->lws_callback_history[i] = engine_instance->lws_callback_history[i - 1];
@@ -482,6 +483,23 @@ static int aclk_lws_wss_callback(struct lws *wsi, enum lws_callback_reasons reas
             return retval;
 
         case LWS_CALLBACK_WSI_CREATE:
+            fd = lws_get_socket_fd(wsi);
+//            socklen_t size = sizeof(int);
+            int val = config_get_number(CONFIG_SECTION_CLOUD, "socket rcvbuf", 0);
+            if (val && (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &val, sizeof(int)) == -1))
+                error("Error SO_RCVBUF setsockopt: \"%s\"", strerror(errno));
+            val = config_get_number(CONFIG_SECTION_CLOUD, "socket sndbuf", 0);
+            if (val && (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &val, sizeof(int)) == -1))
+                error("Error SO_SNDBUF setsockopt: \"%s\"", strerror(errno));
+
+            // TCP_NODELAY is by default enabled by LWS
+            // check if we have to explicitly disable it
+            val = config_get_boolean(CONFIG_SECTION_CLOUD, "socket tcp nodelay", 1);
+            if (!val && (setsockopt(fd, SOL_TCP, TCP_NODELAY, &val, sizeof(int)) == -1))
+                error("Error setting TCP_NODELAY on. \"%s\"", strerror(errno));
+/*            getsockopt(fd, SOL_TCP, TCP_NODELAY, &val, &size);
+            error("TCP_NODELAY %s", val ? "true" : "false");*/
+            /* FALLTHRU */
         case LWS_CALLBACK_CLIENT_FILTER_PRE_ESTABLISH:
         case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER:
         case LWS_CALLBACK_OPENSSL_LOAD_EXTRA_CLIENT_VERIFY_CERTS:

@@ -1494,27 +1494,31 @@ int aclk_send_info_child_connection(RRDHOST *host, ACLK_CMD cmd)
     return 0;
 }
 
-void aclk_host_state_update(RRDHOST *host, ACLK_CMD cmd)
+inline static int aclk_check_min_v4()
 {
 #if ACLK_VERSION_MIN < ACLK_V_CHILDRENSTATE
     if (aclk_shared_state.version_neg < ACLK_V_CHILDRENSTATE)
-        return;
+        return 1;
 #else
 #warning "This check became unnecessary. Remove"
 #endif
+    return 0;
+}
 
+void aclk_host_state_update(RRDHOST *host, ACLK_CMD cmd)
+{
     switch (cmd) {
         case ACLK_CMD_CHILD_CONNECT:
             debug(D_ACLK, "Child Connected %s %s.", host->hostname, host->machine_guid);
             aclk_start_host_popcorning(host);
-            if (unlikely(aclk_host_initializing(localhost)))
+            if (unlikely(aclk_host_initializing(localhost) || aclk_check_min_v4()))
                 return;
             aclk_queue_query("add_child", host, NULL, NULL, 0, 1, ACLK_CMD_CHILD_CONNECT);
             break;
         case ACLK_CMD_CHILD_DISCONNECT:
             debug(D_ACLK, "Child Disconnected %s %s.", host->hostname, host->machine_guid);
             aclk_stop_host_popcorning(host);
-            if (unlikely(aclk_host_initializing(localhost)))
+            if (unlikely(aclk_host_initializing(localhost) || aclk_check_min_v4()))
                 return;
             aclk_queue_query("del_child", host, NULL, NULL, 0, 1, ACLK_CMD_CHILD_DISCONNECT);
             break;

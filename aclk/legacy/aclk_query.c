@@ -704,6 +704,46 @@ ACLK_POPCORNING_STATE aclk_host_popcorn_check(RRDHOST *host)
     return ret;
 }
 
+static int handle_post_connect_metadata(void)
+{
+    int localhost_connect = 0;
+    RRDHOST *host = localhost;
+    rrdhost_aclk_state_lock(localhost);
+    if (unlikely(localhost->aclk_state.metadata == ACLK_METADATA_REQUIRED)) {
+        if (unlikely(aclk_queue_query("on_connect", localhost, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT))) {
+            rrdhost_aclk_state_unlock(localhost);
+            errno = 0;
+            error("ACLK failed to queue on_connect command");
+            sleep(1);
+            return 1;
+        }
+        localhost->aclk_state.metadata = ACLK_METADATA_CMD_QUEUED;
+        localhost_connect = 1;
+    }
+    rrdhost_aclk_state_unlock(localhost);
+
+    // if sent localhost connect also send connect for all already stable children
+    // e.g. after ACLK reconnect while streaming connection was kept
+    if (unlikely(localhost_connect && aclk_shared_state.version_neg >= ACLK_V_CHILDRENSTATE)) {
+        rrd_rdlock();
+        rrdhost_foreach_read(host) {
+            if (unlikely(host == localhost || rrdhost_flag_check(host, RRDHOST_FLAG_ARCHIVED)))
+                continue;
+
+            rrdhost_aclk_state_lock(host);
+            if (host->aclk_state.state == ACLK_HOST_STABLE) {
+                rrdhost_aclk_state_unlock(host);
+                if (unlikely(aclk_queue_query("on_connect", host, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT)))
+                    error("ACLK failed to queue on_connect command for a child");
+                host->aclk_state.metadata = ACLK_METADATA_CMD_QUEUED;
+            } else
+                rrdhost_aclk_state_unlock(host);
+        }
+        rrd_unlock();
+    }
+    return 0;
+}
+
 /**
  * Main query processing thread
  *
@@ -747,22 +787,13 @@ void *aclk_query_main_thread(void *ptr)
         }
         ACLK_SHARED_STATE_UNLOCK;
 
-        rrdhost_aclk_state_lock(localhost);
-        if (unlikely(localhost->aclk_state.metadata == ACLK_METADATA_REQUIRED)) {
-            if (unlikely(aclk_queue_query("on_connect", localhost, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT))) {
-                rrdhost_aclk_state_unlock(localhost);
-                errno = 0;
-                error("ACLK failed to queue on_connect command");
-                sleep(1);
-                continue;
-            }
-            localhost->aclk_state.metadata = ACLK_METADATA_CMD_QUEUED;
-        }
-        rrdhost_aclk_state_unlock(localhost);
+        if (handle_post_connect_metadata())
+            continue;
 
         ACLK_SHARED_STATE_LOCK;
         if (aclk_shared_state.next_popcorn_host && aclk_host_popcorn_check(aclk_shared_state.next_popcorn_host) == ACLK_HOST_STABLE) {
-            aclk_queue_query("on_connect", aclk_shared_state.next_popcorn_host, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT);
+            if (aclk_shared_state.version_neg >= ACLK_V_CHILDRENSTATE)
+                aclk_queue_query("on_connect", aclk_shared_state.next_popcorn_host, NULL, NULL, 0, 1, ACLK_CMD_ONCONNECT);
             aclk_shared_state.next_popcorn_host = NULL;
             aclk_update_next_child_to_popcorn();
         }

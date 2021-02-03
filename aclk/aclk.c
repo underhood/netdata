@@ -175,6 +175,7 @@ static int wait_till_agent_claim_ready()
     return 0;
 }
 
+#ifndef ACLK_NG_PAHO
 void aclk_mqtt_wss_log_cb(mqtt_wss_log_type_t log_type, const char* str)
 {
     switch(log_type) {
@@ -193,6 +194,7 @@ void aclk_mqtt_wss_log_cb(mqtt_wss_log_type_t log_type, const char* str)
             error("Unknown log type from mqtt_wss");
     }
 }
+#endif
 
 //TODO prevent big buffer on stack
 #define RX_MSGLEN_MAX 4096
@@ -268,6 +270,7 @@ static int read_query_thread_count()
  * @returns  0 - Netdata Exits
  *          >0 - Error happened. Reconnect and start over.
  */
+#ifndef ACLK_NG_PAHO
 static int handle_connection(transport_client client)
 {
     time_t last_periodic_query_wakeup = now_monotonic_sec();
@@ -291,6 +294,19 @@ static int handle_connection(transport_client client)
     }
     return 0;
 }
+#else /* ACLK_NG_PAHO defined */
+static int handle_connection(transport_client client)
+{
+    UNUSED(client);
+    while (!netdata_exit) {
+        // Paho handles all network communication on it's own
+        // thread which is wastefull for us but anyway
+        sleep(1);
+        QUERY_THREAD_WAKEUP;
+    }
+    return 0;
+}
+#endif /* ACLK_NG_PAHO */
 
 inline static int aclk_popcorn_check_bump()
 {
@@ -322,7 +338,18 @@ static inline void mqtt_connected_actions(transport_client client)
     aclk_session_sec = now / USEC_PER_SEC;
     aclk_session_us = now % USEC_PER_SEC;
 
+#ifndef ACLK_NG_PAHO
     mqtt_wss_subscribe(client, aclk_get_topic(ACLK_TOPICID_COMMAND), 1);
+#else
+	MQTTAsync_responseOptions ropts = MQTTAsync_responseOptions_initializer;
+	int rc;
+
+/*	ropts.onSuccess = onSubscribe;
+	ropts.onFailure = onSubscribeFailure;*/
+	ropts.context = client;
+	if ((rc = MQTTAsync_subscribe(client, aclk_get_topic(ACLK_TOPICID_COMMAND), ACLK_QOS_1, &ropts)) != MQTTASYNC_SUCCESS)
+		error("Failed to start subscribe, return code %s\n", MQTTAsync_strerror(rc));
+#endif
 
     aclk_stats_upd_online(1);
     aclk_connected = 1;
@@ -377,6 +404,7 @@ void aclk_graceful_disconnect(transport_client client)
     aclk_queue_lock();
     aclk_queue_flush();
     aclk_shared_state.mqtt_shutdown_msg_id = aclk_send_app_layer_disconnect(client, "graceful");
+#ifndef ACLK_NG_PAHO
     time_t t = now_monotonic_sec();
     while (!mqtt_wss_service(client, 100)) {
         if (now_monotonic_sec() - t >= 2) {
@@ -393,6 +421,9 @@ void aclk_graceful_disconnect(transport_client client)
 
     error("Attempting to Gracefully Shutdown MQTT/WSS connection");
     mqtt_wss_disconnect(client, 1000);
+#else
+//TODO!!!!!!!!
+#endif
 }
 
 /* Block till aclk_reconnect_delay is satisifed or netdata_exit is signalled
@@ -464,6 +495,7 @@ static int aclk_attempt_to_connect(transport_client client)
             continue;
         }
 
+#ifndef ACLK_NG_PAHO
         struct mqtt_connect_params mqtt_conn_params = {
             .clientid   = "anon",
             .username   = "anon",
@@ -490,6 +522,10 @@ static int aclk_attempt_to_connect(transport_client client)
             mqtt_connected_actions(client);
             return 0;
         }
+#else
+//TODO!!!!!!!!!!!
+        lwt = aclk_generate_disconnect(NULL);
+#endif /* ACLK_NG_PAHO */
 
         error("Connect failed\n");
     }
@@ -536,10 +572,22 @@ void *aclk_main(void *ptr)
     if (wait_till_agent_claim_ready())
         goto exit;
 
+#ifndef ACLK_NG_PAHO
     if (!(mqttwss_client = mqtt_wss_new("mqtt_wss", aclk_mqtt_wss_log_cb, msg_callback, puback_callback))) {
         error("Couldn't initialize MQTT_WSS network library");
         goto exit;
     }
+#else
+    MQTTAsync_createOptions create_opts = MQTTAsync_createOptions_initializer;
+    create_opts.sendWhileDisconnected = 1;
+    create_opts.MQTTVersion = MQTTVERSION_3_1_1;
+    int rc = MQTTAsync_createWithOptions(&mqttwss_client, "wss://app.netdata.cloud/mqtt", "anon", MQTTCLIENT_PERSISTENCE_NONE, NULL, &create_opts);
+    if (rc != MQTTASYNC_SUCCESS)
+    {
+        error("Failed to create client, return code: %s\n", MQTTAsync_strerror(rc));
+        goto exit;
+    }
+#endif
 
     aclk_stats_enabled = config_get_boolean(CONFIG_SECTION_CLOUD, "statistics", CONFIG_BOOLEAN_YES);
     if (aclk_stats_enabled) {
@@ -584,7 +632,11 @@ exit_full:
         freez(stats_thread);
     }
     free_topic_cache();
+#ifndef ACLK_NG_PAHO
     mqtt_wss_destroy(mqttwss_client);
+#else
+    MQTTAsync_destroy(&mqttwss_client);
+#endif
 exit:
     static_thread->enabled = NETDATA_MAIN_THREAD_EXITED;
     return NULL;

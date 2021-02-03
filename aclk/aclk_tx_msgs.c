@@ -9,6 +9,7 @@
 #pragma region aclk_tx_msgs helper functions
 #endif
 
+#ifndef ACLK_NG_PAHO
 static void aclk_send_message_subtopic(transport_client client, json_object *msg, enum aclk_topics subtopic)
 {
     uint16_t packet_id;
@@ -25,7 +26,15 @@ static void aclk_send_message_subtopic(transport_client client, json_object *msg
     json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
 #endif
 }
+#else /* ACLK_NG_PAHO */
+static void aclk_send_message_subtopic(transport_client client, json_object *msg, enum aclk_topics subtopic)
+{
+    const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
+    MQTTAsync_send(client, aclk_get_topic(subtopic), strlen(str), str, ACLK_QOS_1, 0, NULL);
+}
+#endif /* ACLK_NG_PAHO */
 
+#ifndef ACLK_NG_PAHO
 static uint16_t aclk_send_message_subtopic_pid(transport_client client, json_object *msg, enum aclk_topics subtopic)
 {
     uint16_t packet_id;
@@ -43,6 +52,7 @@ static uint16_t aclk_send_message_subtopic_pid(transport_client client, json_obj
 #endif
     return packet_id;
 }
+#endif
 
 /* UNUSED now but can be used soon MVP1?
 static void aclk_send_message_topic(transport_client client, json_object *msg, const char *topic)
@@ -71,7 +81,9 @@ static void aclk_send_message_topic(transport_client client, json_object *msg, c
 #define V2_BIN_PAYLOAD_SEPARATOR "\x0D\x0A\x0D\x0A"
 static void aclk_send_message_with_bin_payload(transport_client client, json_object *msg, const char *topic, const void *payload, size_t payload_len)
 {
+#ifndef ACLK_NG_PAHO
     uint16_t packet_id;
+#endif
     const char *str;
     char *full_msg;
     int len;
@@ -100,10 +112,16 @@ static void aclk_send_message_with_bin_payload(transport_client client, json_obj
     json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
 #endif */
 
+#ifndef ACLK_NG_PAHO
     mqtt_wss_publish_pid(client, topic, full_msg, len,  ACLK_QOS_1, &packet_id);
 #ifdef NETDATA_INTERNAL_CHECKS
     aclk_stats_msg_published(packet_id);
 #endif
+#else
+    MQTTAsync_send(client, topic, len, str, ACLK_QOS_1, 0, NULL);
+//TODO!!!!!!!!!!!!!!!!!
+#endif
+
     freez(full_msg);
 }
 
@@ -383,7 +401,10 @@ int aclk_send_app_layer_disconnect(transport_client client, const char *message)
 {
     int pid;
     json_object *msg = aclk_generate_disconnect(message);
+    //TODO!!!!! <merge_block> <pr_block>
+#ifndef ACLK_NG_PAHO
     pid = aclk_send_message_subtopic_pid(client, msg, ACLK_TOPICID_METADATA);
+#endif
     json_object_put(msg);
     return pid;
 }

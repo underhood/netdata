@@ -120,9 +120,11 @@ SUBDIRS += \
     $(NULL)
 
 if ACLK_NG
+if !ACLK_NG_PAHO
 SUBDIRS += \
     mqtt_websockets \
     $(NULL)
+endif
 else
 SUBDIRS += \
     aclk/legacy \
@@ -742,10 +744,17 @@ sbin_PROGRAMS += netdata
 netdata_SOURCES = $(NETDATA_FILES)
 
 if ACLK_NG
+if ACLK_NG_PAHO
+netdata_LDADD = \
+    paho.mqtt.c/src/libpaho-mqtt3as.a \
+    $(NETDATA_COMMON_LIBS) \
+    $(NULL)
+else
 netdata_LDADD = \
     mqtt_websockets/libmqttwebsockets.a \
     $(NETDATA_COMMON_LIBS) \
     $(NULL)
+endif #ACLK_NG_PAHO
 else #ACLK_NG
 if ENABLE_ACLK
 netdata_LDADD = \

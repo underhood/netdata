@@ -205,6 +205,14 @@ AC_ARG_WITH(
     [aclk_ng="fallback"]
 )
 
+AC_ARG_WITH(
+    [aclk-ng-paho],
+    [AS_HELP_STRING([--with-aclk-ng-paho],
+                    [Requires use of PAHO-C transport for ACLK-NG])],
+    [aclk_ng_paho="$withval"],
+    [aclk_ng_paho="no"]
+)
+
 AM_CONDITIONAL([ACLK_NG], [true])
 
 if test "${enable_cloud}" = "no"; then
@@ -751,13 +759,19 @@ if test "$enable_cloud" != "no" -a "$aclk_ng" != "no"; then
             AC_DEFINE([ENABLE_ACLK], [1], [netdata ACLK])
             enable_aclk="yes"
             AC_MSG_RESULT([yes])
-            OPTIONAL_MQTT_WSS_CFLAGS="-Imqtt_websockets/src/include"
+            if test "$aclk_ng_paho" = "yes"; then
+                OPTIONAL_MQTT_WSS_CFLAGS="-Ipaho.mqtt.c/src"
+                AC_DEFINE([ACLK_NG_PAHO], [1], [Paho-c to be used as ACLK-NG transport])
+            else
+                OPTIONAL_MQTT_WSS_CFLAGS="-Imqtt_websockets/src/include"
+            fi
         fi
     fi
 fi
 AC_SUBST([enable_cloud])
 AC_SUBST([enable_aclk])
 AM_CONDITIONAL([ACLK_NG], [test "${aclk_ng}" = "yes"])
+AM_CONDITIONAL([ACLK_NG_PAHO], [test "${aclk_ng_paho}" = "yes"])
 AM_CONDITIONAL([ENABLE_ACLK], [test "${enable_aclk}" = "yes"])
 
 # -----------------------------------------------------------------------------

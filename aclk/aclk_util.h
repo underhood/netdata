@@ -4,6 +4,9 @@
 
 #include "libnetdata/libnetdata.h"
 
+#include "mqtt_wss_client.h"
+typedef mqtt_wss_client transport_client;
+
 // Helper stuff which should not have any further inside ACLK dependency
 // and are supposed not to be needed outside of ACLK
 

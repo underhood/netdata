@@ -1,7 +1,6 @@
 #include "aclk.h"
 
 #include "aclk_stats.h"
-#include "mqtt_wss_client.h"
 #include "aclk_otp.h"
 #include "aclk_tx_msgs.h"
 #include "aclk_query.h"
@@ -29,7 +28,7 @@ int aclk_pubacks_per_conn = 0; // How many PubAcks we got since MQTT conn est.
 usec_t aclk_session_us = 0;         // Used by the mqtt layer
 time_t aclk_session_sec = 0;        // Used by the mqtt layer
 
-mqtt_wss_client mqttwss_client;
+transport_client mqttwss_client;
 
 netdata_mutex_t aclk_shared_state_mutex = NETDATA_MUTEX_INITIALIZER;
 #define ACLK_SHARED_STATE_LOCK netdata_mutex_lock(&aclk_shared_state_mutex)
@@ -265,11 +264,11 @@ static int read_query_thread_count()
 
 /* Keeps connection alive and handles all network comms.
  * Returns on error or when netdata is shutting down.
- * @param client instance of mqtt_wss_client
+ * @param client instance of transport_client
  * @returns  0 - Netdata Exits
  *          >0 - Error happened. Reconnect and start over.
  */
-static int handle_connection(mqtt_wss_client client)
+static int handle_connection(transport_client client)
 {
     time_t last_periodic_query_wakeup = now_monotonic_sec();
     while (!netdata_exit) {
@@ -316,7 +315,7 @@ static inline void queue_connect_payloads(void)
     aclk_queue_query(query);
 }
 
-static inline void mqtt_connected_actions(mqtt_wss_client client)
+static inline void mqtt_connected_actions(transport_client client)
 {
     // TODO global vars?
     usec_t now = now_realtime_usec();
@@ -338,13 +337,13 @@ static inline void mqtt_connected_actions(mqtt_wss_client client)
 }
 
 /* Waits until agent is ready or needs to exit
- * @param client instance of mqtt_wss_client
+ * @param client instance of transport_client
  * @param query_threads pointer to aclk_query_threads
  *        structure where to store data about started query threads
  * @return  0 - Popcorning Finished - Agent STABLE,
  *         !0 - netdata_exit
  */
-static int wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_threads *query_threads)
+static int wait_popcorning_finishes(transport_client client, struct aclk_query_threads *query_threads)
 {
     time_t elapsed;
     int need_wait;
@@ -372,7 +371,7 @@ static int wait_popcorning_finishes(mqtt_wss_client client, struct aclk_query_th
     return 1;
 }
 
-void aclk_graceful_disconnect(mqtt_wss_client client)
+void aclk_graceful_disconnect(transport_client client)
 {
     error("Preparing to Gracefully Shutdown the ACLK");
     aclk_queue_lock();
@@ -424,7 +423,7 @@ static int aclk_block_till_recon_allowed() {
 }
 
 /* Attempts to make a connection to MQTT broker over WSS
- * @param client instance of mqtt_wss_client
+ * @param client instance of transport_client
  * @return  0 - Successfull Connection,
  *          <0 - Irrecoverable Error -> Kill ACLK,
  *          >0 - netdata_exit
@@ -435,7 +434,7 @@ static int aclk_block_till_recon_allowed() {
 #else
 #define ACLK_SSL_FLAGS MQTT_WSS_SSL_CERT_CHECK_FULL
 #endif
-static int aclk_attempt_to_connect(mqtt_wss_client client)
+static int aclk_attempt_to_connect(transport_client client)
 {
     char *aclk_hostname = NULL;
     int aclk_port;

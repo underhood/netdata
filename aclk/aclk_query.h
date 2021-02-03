@@ -4,8 +4,7 @@
 #define NETDATA_ACLK_QUERY_H
 
 #include "libnetdata/libnetdata.h"
-
-#include "mqtt_wss_client.h"
+#include "aclk_util.h"
 
 extern pthread_cond_t query_cond_wait;
 extern pthread_mutex_t query_lock_wait;
@@ -18,7 +17,7 @@ extern pthread_mutex_t query_lock_wait;
 struct aclk_query_thread {
     netdata_thread_t thread;
     int idx;
-    mqtt_wss_client client;
+    transport_client client;
 };
 
 struct aclk_query_threads {
@@ -26,7 +25,7 @@ struct aclk_query_threads {
     int count;
 };
 
-void aclk_query_threads_start(struct aclk_query_threads *query_threads, mqtt_wss_client client);
+void aclk_query_threads_start(struct aclk_query_threads *query_threads, transport_client client);
 void aclk_query_threads_cleanup(struct aclk_query_threads *query_threads);
 
 #endif //NETDATA_AGENT_CLOUD_LINK_H

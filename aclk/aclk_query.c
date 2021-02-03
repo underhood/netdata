@@ -15,10 +15,10 @@ pthread_mutex_t query_lock_wait = PTHREAD_MUTEX_INITIALIZER;
 typedef struct aclk_query_handler {
     aclk_query_type_t type;
     char *name; // for logging purposes
-    int(*fnc)(mqtt_wss_client client, aclk_query_t query);
+    int(*fnc)(transport_client client, aclk_query_t query);
 } aclk_query_handler;
 
-static int info_metadata(mqtt_wss_client client, aclk_query_t query)
+static int info_metadata(transport_client client, aclk_query_t query)
 {
     aclk_send_info_metadata(client,
         !query->data.metadata_info.initial_on_connect,
@@ -26,7 +26,7 @@ static int info_metadata(mqtt_wss_client client, aclk_query_t query)
     return 0;
 }
 
-static int alarms_metadata(mqtt_wss_client client, aclk_query_t query)
+static int alarms_metadata(transport_client client, aclk_query_t query)
 {
     aclk_send_alarm_metadata(client,
         !query->data.metadata_info.initial_on_connect);
@@ -53,7 +53,7 @@ static usec_t aclk_web_api_v1_request(RRDHOST *host, struct web_client *w, char 
     return t;
 }
 
-static int http_api_v2(mqtt_wss_client client, aclk_query_t query)
+static int http_api_v2(transport_client client, aclk_query_t query)
 {
     int retval = 0;
     usec_t t;
@@ -171,13 +171,13 @@ cleanup:
     return retval;
 }
 
-static int chart_query(mqtt_wss_client client, aclk_query_t query)
+static int chart_query(transport_client client, aclk_query_t query)
 {
     aclk_chart_msg(client, query->data.chart_add_del.host, query->data.chart_add_del.chart_name);
     return 0;
 }
 
-static int alarm_state_update_query(mqtt_wss_client client, aclk_query_t query)
+static int alarm_state_update_query(transport_client client, aclk_query_t query)
 {
     aclk_alarm_state_msg(client, query->data.alarm_update);
     // aclk_alarm_state_msg frees the json object including the header it generates
@@ -263,7 +263,7 @@ void *aclk_query_main_thread(void *ptr)
 }
 
 #define TASK_LEN_MAX 16
-void aclk_query_threads_start(struct aclk_query_threads *query_threads, mqtt_wss_client client)
+void aclk_query_threads_start(struct aclk_query_threads *query_threads, transport_client client)
 {
     info("Starting %d query threads.", query_threads->count);
 

@@ -9,7 +9,7 @@
 #pragma region aclk_tx_msgs helper functions
 #endif
 
-static void aclk_send_message_subtopic(mqtt_wss_client client, json_object *msg, enum aclk_topics subtopic)
+static void aclk_send_message_subtopic(transport_client client, json_object *msg, enum aclk_topics subtopic)
 {
     uint16_t packet_id;
     const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
@@ -26,7 +26,7 @@ static void aclk_send_message_subtopic(mqtt_wss_client client, json_object *msg,
 #endif
 }
 
-static uint16_t aclk_send_message_subtopic_pid(mqtt_wss_client client, json_object *msg, enum aclk_topics subtopic)
+static uint16_t aclk_send_message_subtopic_pid(transport_client client, json_object *msg, enum aclk_topics subtopic)
 {
     uint16_t packet_id;
     const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
@@ -45,7 +45,7 @@ static uint16_t aclk_send_message_subtopic_pid(mqtt_wss_client client, json_obje
 }
 
 /* UNUSED now but can be used soon MVP1?
-static void aclk_send_message_topic(mqtt_wss_client client, json_object *msg, const char *topic)
+static void aclk_send_message_topic(transport_client client, json_object *msg, const char *topic)
 {
     if (unlikely(!topic || topic[0] != '/')) {
         error ("Full topic required!");
@@ -69,7 +69,7 @@ static void aclk_send_message_topic(mqtt_wss_client client, json_object *msg, co
 
 #define TOPIC_MAX_LEN 512
 #define V2_BIN_PAYLOAD_SEPARATOR "\x0D\x0A\x0D\x0A"
-static void aclk_send_message_with_bin_payload(mqtt_wss_client client, json_object *msg, const char *topic, const void *payload, size_t payload_len)
+static void aclk_send_message_with_bin_payload(transport_client client, json_object *msg, const char *topic, const void *payload, size_t payload_len)
 {
     uint16_t packet_id;
     const char *str;
@@ -185,7 +185,7 @@ static char *create_uuid()
  * This will send the /api/v1/info
  */
 #define BUFFER_INITIAL_SIZE (1024 * 16)
-void aclk_send_info_metadata(mqtt_wss_client client, int metadata_submitted, RRDHOST *host)
+void aclk_send_info_metadata(transport_client client, int metadata_submitted, RRDHOST *host)
 {
     BUFFER *local_buffer = buffer_create(BUFFER_INITIAL_SIZE);
     json_object *msg, *payload, *tmp;
@@ -226,7 +226,7 @@ void aclk_send_info_metadata(mqtt_wss_client client, int metadata_submitted, RRD
 // TODO should include header instead
 void health_active_log_alarms_2json(RRDHOST *host, BUFFER *wb);
 
-void aclk_send_alarm_metadata(mqtt_wss_client client, int metadata_submitted)
+void aclk_send_alarm_metadata(transport_client client, int metadata_submitted)
 {
     BUFFER *local_buffer = buffer_create(BUFFER_INITIAL_SIZE);
     json_object *msg, *payload, *tmp;
@@ -264,7 +264,7 @@ void aclk_send_alarm_metadata(mqtt_wss_client client, int metadata_submitted)
     buffer_free(local_buffer);
 }
 
-void aclk_hello_msg(mqtt_wss_client client)
+void aclk_hello_msg(transport_client client)
 {
     json_object *tmp, *msg;
 
@@ -296,7 +296,7 @@ void aclk_hello_msg(mqtt_wss_client client)
     freez(msg_id);
 }
 
-void aclk_http_msg_v2(mqtt_wss_client client, const char *topic, const char *msg_id, usec_t t_exec, usec_t created, int http_code, const char *payload, size_t payload_len)
+void aclk_http_msg_v2(transport_client client, const char *topic, const char *msg_id, usec_t t_exec, usec_t created, int http_code, const char *payload, size_t payload_len)
 {
     json_object *tmp, *msg;
 
@@ -315,7 +315,7 @@ void aclk_http_msg_v2(mqtt_wss_client client, const char *topic, const char *msg
     json_object_put(msg);
 }
 
-void aclk_chart_msg(mqtt_wss_client client, RRDHOST *host, const char *chart)
+void aclk_chart_msg(transport_client client, RRDHOST *host, const char *chart)
 {
     json_object *msg, *payload;
     BUFFER *tmp_buffer;
@@ -347,7 +347,7 @@ void aclk_chart_msg(mqtt_wss_client client, RRDHOST *host, const char *chart)
     json_object_put(msg);
 }
 
-void aclk_alarm_state_msg(mqtt_wss_client client, json_object *msg)
+void aclk_alarm_state_msg(transport_client client, json_object *msg)
 {
     // we create header here on purpose (and not send message with it already as `msg` param)
     // one is version_neg is guaranteed to be done here
@@ -379,7 +379,7 @@ json_object *aclk_generate_disconnect(const char *message)
     return msg;
 }
 
-int aclk_send_app_layer_disconnect(mqtt_wss_client client, const char *message)
+int aclk_send_app_layer_disconnect(transport_client client, const char *message)
 {
     int pid;
     json_object *msg = aclk_generate_disconnect(message);

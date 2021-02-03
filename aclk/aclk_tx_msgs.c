@@ -14,7 +14,7 @@ static void aclk_send_message_subtopic(transport_client client, json_object *msg
     uint16_t packet_id;
     const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
 
-    mqtt_wss_publish_pid(client, aclk_get_topic(subtopic), str, strlen(str),  MQTT_WSS_PUB_QOS1, &packet_id);
+    mqtt_wss_publish_pid(client, aclk_get_topic(subtopic), str, strlen(str),  ACLK_QOS_1, &packet_id);
 #ifdef NETDATA_INTERNAL_CHECKS
     aclk_stats_msg_published(packet_id);
 #endif
@@ -31,7 +31,7 @@ static uint16_t aclk_send_message_subtopic_pid(transport_client client, json_obj
     uint16_t packet_id;
     const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
 
-    mqtt_wss_publish_pid(client, aclk_get_topic(subtopic), str, strlen(str),  MQTT_WSS_PUB_QOS1, &packet_id);
+    mqtt_wss_publish_pid(client, aclk_get_topic(subtopic), str, strlen(str),  ACLK_QOS_1, &packet_id);
 #ifdef NETDATA_INTERNAL_CHECKS
     aclk_stats_msg_published(packet_id);
 #endif
@@ -54,7 +54,7 @@ static void aclk_send_message_topic(transport_client client, json_object *msg, c
 
     const char *str = json_object_to_json_string_ext(msg, JSON_C_TO_STRING_PLAIN);
 
-    mqtt_wss_publish(client, topic, str, strlen(str),  MQTT_WSS_PUB_QOS1);
+    mqtt_wss_publish(client, topic, str, strlen(str),  ACLK_QOS_1);
 #ifdef NETDATA_INTERNAL_CHECKS
     aclk_stats_msg_published();
 #endif
@@ -100,7 +100,7 @@ static void aclk_send_message_with_bin_payload(transport_client client, json_obj
     json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
 #endif */
 
-    mqtt_wss_publish_pid(client, topic, full_msg, len,  MQTT_WSS_PUB_QOS1, &packet_id);
+    mqtt_wss_publish_pid(client, topic, full_msg, len,  ACLK_QOS_1, &packet_id);
 #ifdef NETDATA_INTERNAL_CHECKS
     aclk_stats_msg_published(packet_id);
 #endif

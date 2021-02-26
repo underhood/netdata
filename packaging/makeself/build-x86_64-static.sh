@@ -5,6 +5,15 @@
 # shellcheck source=./packaging/installer/functions.sh
 . "$(dirname "$0")"/../installer/functions.sh || exit 1
 
+if command -v podman >/dev/null 2>&1 ; then
+  CONTAINER_RUNTIME="podman"
+elif command -v wget >/dev/null 2>&1 ; then
+  CONTAINER_RUNTIME="docker"
+else
+  echo >&2 "I need docker or podman to proceed, but neither is available on this system."
+  exit 1
+fi
+
 set -e
 
 DOCKER_CONTAINER_NAME="netdata-package-x86_64-static-alpine312"
@@ -23,17 +32,17 @@ if ! docker inspect "${DOCKER_CONTAINER_NAME}" > /dev/null 2>&1; then
   # inside the container and runs the script install-alpine-packages.sh
   # (also inside the container)
   #
-  run docker run -v "$(pwd)":/usr/src/netdata.git:rw alpine:3.12 \
+  run "${CONTAINER_RUNTIME}" run -v "$(pwd)":/usr/src/netdata.git:rw alpine:3.12 \
     /bin/sh /usr/src/netdata.git/packaging/makeself/install-alpine-packages.sh
 
   # save the changes made permanently
-  id=$(docker ps -l -q)
-  run docker commit "${id}" "${DOCKER_CONTAINER_NAME}"
+  id=$("${CONTAINER_RUNTIME}" ps -l -q)
+  run "${CONTAINER_RUNTIME}" commit "${id}" "${DOCKER_CONTAINER_NAME}"
 fi
 
 # Run the build script inside the container
 if [ -t 1 ]; then
-  run docker run -a stdin -a stdout -a stderr -i -t -v \
+  run "${CONTAINER_RUNTIME}" run -a stdin -a stdout -a stderr -i -t -v \
     "$(pwd)":/usr/src/netdata.git:rw \
     "${DOCKER_CONTAINER_NAME}" \
     /bin/sh /usr/src/netdata.git/packaging/makeself/build.sh "${@}"

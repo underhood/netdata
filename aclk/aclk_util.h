@@ -51,11 +51,13 @@ void aclk_transport_desc_t_destroy(aclk_transport_desc_t *trp_desc);
 void aclk_env_t_destroy(aclk_env_t *env);
 
 enum aclk_topics {
-    ACLK_TOPICID_UNKNOWN  = 0,
-    ACLK_TOPICID_CHART    = 1,
-    ACLK_TOPICID_ALARMS   = 2,
-    ACLK_TOPICID_METADATA = 3,
-    ACLK_TOPICID_COMMAND  = 4
+    ACLK_TOPICID_UNKNOWN    = 0,
+    ACLK_TOPICID_CHART      = 1,
+    ACLK_TOPICID_ALARMS     = 2,
+    ACLK_TOPICID_METADATA   = 3,
+    ACLK_TOPICID_COMMAND    = 4,
+    ACLK_TOPICID_AGENT_CONN = 5,
+    ACLK_TOPICID_CMD_V2     = 6
 };
 
 const char *aclk_get_topic(enum aclk_topics topic);

@@ -26,6 +26,7 @@ int aclk_connected = 0;
 int aclk_disable_runtime = 0;
 int aclk_disable_single_updates = 0;
 int aclk_kill_link = 0;
+int aclk_use_new_cloud_arch = 0;
 
 int aclk_pubacks_per_conn = 0; // How many PubAcks we got since MQTT conn est.
 
@@ -326,7 +327,7 @@ static inline void mqtt_connected_actions(mqtt_wss_client client)
     aclk_session_sec = now / USEC_PER_SEC;
     aclk_session_us = now % USEC_PER_SEC;
 
-    const char *topic = aclk_get_topic(ACLK_TOPICID_COMMAND);
+    const char *topic = aclk_get_topic(aclk_use_new_cloud_arch ? ACLK_TOPICID_CMD_V2 : ACLK_TOPICID_COMMAND);
 
     if (!topic)
         error("Unable to fetch topic for COMMAND (to subscribe)");
@@ -337,12 +338,15 @@ static inline void mqtt_connected_actions(mqtt_wss_client client)
     aclk_connected = 1;
     aclk_pubacks_per_conn = 0;
 
-    ACLK_SHARED_STATE_LOCK;
-    if (aclk_shared_state.agent_state != AGENT_INITIALIZING) {
-        error("Sending `connect` payload immediately as popcorning was finished already.");
-        queue_connect_payloads();
-    }
-    ACLK_SHARED_STATE_UNLOCK;
+    if (!aclk_use_new_cloud_arch) {
+        ACLK_SHARED_STATE_LOCK;
+        if (aclk_shared_state.agent_state != AGENT_INITIALIZING) {
+            error("Sending `connect` payload immediately as popcorning was finished already.");
+            queue_connect_payloads();
+        }
+        ACLK_SHARED_STATE_UNLOCK;
+    } else
+        aclk_send_agent_connection_update(client, 1);
 }
 
 /* Waits until agent is ready or needs to exit
@@ -385,7 +389,11 @@ void aclk_graceful_disconnect(mqtt_wss_client client)
     error("Preparing to Gracefully Shutdown the ACLK");
     aclk_queue_lock();
     aclk_queue_flush();
-    aclk_shared_state.mqtt_shutdown_msg_id = aclk_send_app_layer_disconnect(client, "graceful");
+    if (aclk_use_new_cloud_arch)
+        aclk_shared_state.mqtt_shutdown_msg_id = aclk_send_agent_connection_update(client, 0);
+    else
+        aclk_shared_state.mqtt_shutdown_msg_id = aclk_send_app_layer_disconnect(client, "graceful");
+
     time_t t = now_monotonic_sec();
     while (!mqtt_wss_service(client, 100)) {
         if (now_monotonic_sec() - t >= 2) {
@@ -471,7 +479,7 @@ static int aclk_attempt_to_connect(mqtt_wss_client client)
     url_t mqtt_url;
 #endif
 
-    json_object *lwt;
+    json_object *lwt = NULL;
 
     while (!netdata_exit) {
         char *cloud_base_url = appconfig_get(&cloud_config, CONFIG_SECTION_GLOBAL, "cloud base url", NULL);
@@ -536,7 +544,11 @@ static int aclk_attempt_to_connect(mqtt_wss_client client)
 
         // aclk_get_topic moved here as during OTP we
         // generate the topic cache
-        mqtt_conn_params.will_topic = aclk_get_topic(ACLK_TOPICID_METADATA);
+        if (aclk_use_new_cloud_arch)
+            mqtt_conn_params.will_topic = aclk_get_topic(ACLK_TOPICID_AGENT_CONN);
+        else
+            mqtt_conn_params.will_topic = aclk_get_topic(ACLK_TOPICID_METADATA);
+
         if (!mqtt_conn_params.will_topic) {
             error("Couldn't get LWT topic. Will not send LWT.");
             continue;
@@ -557,9 +569,14 @@ static int aclk_attempt_to_connect(mqtt_wss_client client)
         }
 #endif
 
-        lwt = aclk_generate_disconnect(NULL);
-        mqtt_conn_params.will_msg = json_object_to_json_string_ext(lwt, JSON_C_TO_STRING_PLAIN);
-        mqtt_conn_params.will_msg_len = strlen(mqtt_conn_params.will_msg);
+        if (aclk_use_new_cloud_arch) {
+            mqtt_conn_params.will_msg = aclk_generate_lwt(&mqtt_conn_params.will_msg_len);
+        } else {
+            lwt = aclk_generate_disconnect(NULL);
+            mqtt_conn_params.will_msg = json_object_to_json_string_ext(lwt, JSON_C_TO_STRING_PLAIN);
+            mqtt_conn_params.will_msg_len = strlen(mqtt_conn_params.will_msg);
+        }
+
 
 #ifdef ACLK_DISABLE_CHALLENGE
         ret = mqtt_wss_connect(client, base_url.host, base_url.port, &mqtt_conn_params, ACLK_SSL_FLAGS, &proxy_conf);
@@ -573,7 +590,10 @@ static int aclk_attempt_to_connect(mqtt_wss_client client)
         freez((char*)mqtt_conn_params.username);
 #endif
 
-        json_object_put(lwt);
+        if (aclk_use_new_cloud_arch)
+            freez((char *)mqtt_conn_params.will_msg);
+        else
+            json_object_put(lwt);
 
         if (!ret) {
             info("MQTTWSS connection succeeded");

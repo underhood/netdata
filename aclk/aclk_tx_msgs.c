@@ -4,6 +4,7 @@
 #include "../daemon/common.h"
 #include "aclk_util.h"
 #include "aclk_stats.h"
+#include "schema-wrappers/schema_wrappers.h"
 
 #ifndef __GNUC__
 #pragma region aclk_tx_msgs helper functions
@@ -30,6 +31,26 @@ static void aclk_send_message_subtopic(mqtt_wss_client client, json_object *msg,
     snprintf(filename, FN_MAX_LEN, ACLK_LOG_CONVERSATION_DIR "/%010d-tx.json", ACLK_GET_CONV_LOG_NEXT());
     json_object_to_file_ext(filename, msg, JSON_C_TO_STRING_PRETTY);
 #endif
+}
+
+static uint16_t aclk_send_bin_message_subtopic_pid(mqtt_wss_client client, char *msg, size_t msg_len, enum aclk_topics subtopic)
+{
+    uint16_t packet_id;
+    const char *topic = aclk_get_topic(subtopic);
+
+    if (unlikely(!topic)) {
+        error("Couldn't get topic. Aborting mesage send");
+        return 0;
+    }
+
+    mqtt_wss_publish_pid(client, topic, msg, msg_len,  MQTT_WSS_PUB_QOS1, &packet_id);
+#ifdef NETDATA_INTERNAL_CHECKS
+    aclk_stats_msg_published(packet_id);
+#endif
+
+    return packet_id;
+//TODO ACLK_LOG_CONVERSATION_DIR
+//#ifdef ACLK_LOG_CONVERSATION_DIR
 }
 
 static uint16_t aclk_send_message_subtopic_pid(mqtt_wss_client client, json_object *msg, enum aclk_topics subtopic)
@@ -366,6 +387,59 @@ int aclk_send_app_layer_disconnect(mqtt_wss_client client, const char *message)
     pid = aclk_send_message_subtopic_pid(client, msg, ACLK_TOPICID_METADATA);
     json_object_put(msg);
     return pid;
+}
+
+// new protobuf msgs
+uint16_t aclk_send_agent_connection_update(mqtt_wss_client client, int reachable) {
+    size_t len;
+    uint16_t pid;
+    update_agent_connection_t conn = {
+        .reachable = (reachable ? 1 : 0),
+        .lwt = 0,
+        //TODO
+        .session_id = 123
+    };
+
+    rrdhost_aclk_state_lock(localhost);
+    if (unlikely(!localhost->aclk_state.claimed_id)) {
+        error("Internal error. Should not come here if not claimed");
+        rrdhost_aclk_state_unlock(localhost);
+        return 0;
+    }
+    conn.claim_id = localhost->aclk_state.claimed_id;
+
+    char *msg = generate_update_agent_connection(&len, &conn);
+    rrdhost_aclk_state_unlock(localhost);
+
+    if (!msg) {
+        error("Error generating agent::v1::UpdateAgentConnection payload");
+        return 0;
+    }
+
+    pid = aclk_send_bin_message_subtopic_pid(client, msg, len, ACLK_TOPICID_AGENT_CONN);
+    freez(msg);
+    return pid;
+}
+
+char *aclk_generate_lwt(size_t *size) {
+    //TODO session_id
+    update_agent_connection_t conn = { .reachable = 0, .lwt = 1, .session_id = 123 };
+
+        rrdhost_aclk_state_lock(localhost);
+    if (unlikely(!localhost->aclk_state.claimed_id)) {
+        error("Internal error. Should not come here if not claimed");
+        rrdhost_aclk_state_unlock(localhost);
+        return NULL;
+    }
+    conn.claim_id = localhost->aclk_state.claimed_id;
+
+    char *msg = generate_update_agent_connection(size, &conn);
+    rrdhost_aclk_state_unlock(localhost);
+
+    if (!msg)
+        error("Error generating agent::v1::UpdateAgentConnection payload for LWT");
+
+    return msg;
 }
 
 #ifndef __GNUC__

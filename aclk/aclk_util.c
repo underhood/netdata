@@ -109,11 +109,13 @@ struct topic_name {
     // in answer to /password endpoint
     const char *name;
 } topic_names[] = {
-    { .id = ACLK_TOPICID_CHART,    .name = "chart"     },
-    { .id = ACLK_TOPICID_ALARMS,   .name = "alarms"    },
-    { .id = ACLK_TOPICID_METADATA, .name = "meta"      },
-    { .id = ACLK_TOPICID_COMMAND,  .name = "inbox-cmd" },
-    { .id = ACLK_TOPICID_UNKNOWN,  .name = NULL        }
+    { .id = ACLK_TOPICID_CHART,      .name = "chart"            },
+    { .id = ACLK_TOPICID_ALARMS,     .name = "alarms"           },
+    { .id = ACLK_TOPICID_METADATA,   .name = "meta"             },
+    { .id = ACLK_TOPICID_COMMAND,    .name = "inbox-cmd"        },
+    { .id = ACLK_TOPICID_AGENT_CONN, .name = "agent-connection" },
+    { .id = ACLK_TOPICID_CMD_V2,     .name = "inbox-cmd-v2"     },
+    { .id = ACLK_TOPICID_UNKNOWN,    .name = NULL               }
 };
 
 enum aclk_topics compulsory_topics[] = {
@@ -121,6 +123,17 @@ enum aclk_topics compulsory_topics[] = {
     ACLK_TOPICID_ALARMS,
     ACLK_TOPICID_METADATA,
     ACLK_TOPICID_COMMAND,
+    ACLK_TOPICID_UNKNOWN
+};
+
+enum aclk_topics compulsory_topics_new_cloud_arch[] = {
+// TODO remove old topics once not needed anymore
+    ACLK_TOPICID_CHART,
+    ACLK_TOPICID_ALARMS,
+    ACLK_TOPICID_METADATA,
+    ACLK_TOPICID_COMMAND,
+    ACLK_TOPICID_AGENT_CONN,
+    ACLK_TOPICID_CMD_V2,
     ACLK_TOPICID_UNKNOWN
 };
 

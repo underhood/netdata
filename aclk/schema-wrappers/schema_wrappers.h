@@ -6,5 +6,6 @@
 #define SCHEMA_WRAPPERS_H
 
 #include "connection.h"
+#include "node_connection.h"
 
 #endif /* SCHEMA_WRAPPERS_H */

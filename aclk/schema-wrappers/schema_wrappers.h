@@ -7,5 +7,6 @@
 
 #include "connection.h"
 #include "node_connection.h"
+#include "node_creation.h"
 
 #endif /* SCHEMA_WRAPPERS_H */

@@ -79,4 +79,8 @@ void aclk_del_collector(RRDHOST *host, const char *plugin_name, const char *modu
 
 struct label *add_aclk_host_labels(struct label *label);
 
+#define ACLK_CMD_CHILD_DISCONNECT 0
+#define ACLK_CMD_CHILD_CONNECT    1
+void aclk_host_state_update(RRDHOST *host, int cmd);
+
 #endif /* ACLK_H */

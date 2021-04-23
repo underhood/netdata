@@ -888,3 +888,7 @@ struct label *add_aclk_host_labels(struct label *label) {
     return label;
 #endif
 }
+
+void aclk_host_state_update(RRDHOST *host, int cmd) {
+    error("ACLK host_state_update %d %s", cmd, host->machine_guid);
+}

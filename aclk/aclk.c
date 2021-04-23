@@ -32,6 +32,7 @@ int aclk_pubacks_per_conn = 0; // How many PubAcks we got since MQTT conn est.
 
 usec_t aclk_session_us = 0;         // Used by the mqtt layer
 time_t aclk_session_sec = 0;        // Used by the mqtt layer
+usec_t aclk_session_newarch = 0;
 
 aclk_env_t *aclk_env = NULL;
 
@@ -322,11 +323,6 @@ static inline void queue_connect_payloads(void)
 
 static inline void mqtt_connected_actions(mqtt_wss_client client)
 {
-    // TODO global vars?
-    usec_t now = now_realtime_usec();
-    aclk_session_sec = now / USEC_PER_SEC;
-    aclk_session_us = now % USEC_PER_SEC;
-
     const char *topic = aclk_get_topic(aclk_use_new_cloud_arch ? ACLK_TOPICID_CMD_V2 : ACLK_TOPICID_COMMAND);
 
     if (!topic)
@@ -568,6 +564,10 @@ static int aclk_attempt_to_connect(mqtt_wss_client client)
             continue;
         }
 #endif
+
+        aclk_session_newarch = now_realtime_usec();
+        aclk_session_sec = aclk_session_newarch / USEC_PER_SEC;
+        aclk_session_us = aclk_session_newarch % USEC_PER_SEC;
 
         if (aclk_use_new_cloud_arch) {
             mqtt_conn_params.will_msg = aclk_generate_lwt(&mqtt_conn_params.will_msg_len);

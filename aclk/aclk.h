@@ -27,6 +27,7 @@ extern int aclk_connected;
 
 extern usec_t aclk_session_us;
 extern time_t aclk_session_sec;
+extern usec_t aclk_session_newarch;
 
 extern aclk_env_t *aclk_env;
 

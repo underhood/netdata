@@ -396,8 +396,7 @@ uint16_t aclk_send_agent_connection_update(mqtt_wss_client client, int reachable
     update_agent_connection_t conn = {
         .reachable = (reachable ? 1 : 0),
         .lwt = 0,
-        //TODO
-        .session_id = 123
+        .session_id = aclk_session_newarch
     };
 
     rrdhost_aclk_state_lock(localhost);
@@ -422,10 +421,13 @@ uint16_t aclk_send_agent_connection_update(mqtt_wss_client client, int reachable
 }
 
 char *aclk_generate_lwt(size_t *size) {
-    //TODO session_id
-    update_agent_connection_t conn = { .reachable = 0, .lwt = 1, .session_id = 123 };
+    update_agent_connection_t conn = {
+        .reachable = 0,
+        .lwt = 1,
+        .session_id = aclk_session_newarch
+    };
 
-        rrdhost_aclk_state_lock(localhost);
+    rrdhost_aclk_state_lock(localhost);
     if (unlikely(!localhost->aclk_state.claimed_id)) {
         error("Internal error. Should not come here if not claimed");
         rrdhost_aclk_state_unlock(localhost);

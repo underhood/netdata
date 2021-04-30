@@ -77,4 +77,6 @@ extern int get_node_id(uuid_t *host_id, uuid_t *node_id);
 extern void invalidate_node_instances(uuid_t *host_id, uuid_t *claim_id);
 extern struct node_instance_list *get_node_list(void);
 extern void sql_load_node_id(RRDHOST *host);
+extern int alert_hash_and_store_config(uuid_t hash_id, const char *alarm, const char *template, const char *os, const char *host, const char *on, const char *families, const char *plugin, const char *module, const char *lookup,const char *calc, const char *every, const char *green,const char *red,const char *warn,const char *crit,const char *exec,const char *to,const char *units,const char *info,const char *classification, const char *component, const char *type, const char *delay,const char *options,const char *repeat,const char *host_labels);
+extern void sql_select_alert(char *hash_str, BUFFER *wb);
 #endif //NETDATA_SQLITE_FUNCTIONS_H

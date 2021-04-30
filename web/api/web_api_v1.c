@@ -210,6 +210,27 @@ int web_client_api_request_v1_alarms_select (char *url) {
     return all;
 }
 
+int web_client_api_request_v1_alarm_config (RRDHOST *host __maybe_unused, struct web_client *w, char *url) {
+    char *hash_id = NULL;
+    
+    while(url) {
+        char *value = mystrsep(&url, "&");
+        if(!value || !*value) continue;
+
+        char *name = mystrsep(&value, "=");
+        if(!name || !*name) continue;
+        if(!value || !*value) continue;
+
+        if(!strcmp(name, "hash_id"))
+            hash_id = value;
+    }
+
+    buffer_flush(w->response.data);
+    w->response.data->contenttype = CT_APPLICATION_JSON;
+    sql_select_alert(hash_id, w->response.data);
+    return HTTP_RESP_OK;    
+}
+
 inline int web_client_api_request_v1_alarms(RRDHOST *host, struct web_client *w, char *url) {
     int all = web_client_api_request_v1_alarms_select(url);
 
@@ -1125,6 +1146,7 @@ static struct api_command {
         { "alarm_log",       0, WEB_CLIENT_ACL_DASHBOARD, web_client_api_request_v1_alarm_log       },
         { "alarm_variables", 0, WEB_CLIENT_ACL_DASHBOARD, web_client_api_request_v1_alarm_variables },
         { "alarm_count",     0, WEB_CLIENT_ACL_DASHBOARD, web_client_api_request_v1_alarm_count     },
+        { "alarm_config",    0, WEB_CLIENT_ACL_DASHBOARD, web_client_api_request_v1_alarm_config    },
         { "allmetrics",      0, WEB_CLIENT_ACL_DASHBOARD, web_client_api_request_v1_allmetrics      },
         { "manage/health",   0, WEB_CLIENT_ACL_MGMT,      web_client_api_request_v1_mgmt_health     },
         // terminator

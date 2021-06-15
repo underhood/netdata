@@ -598,6 +598,15 @@ static int aclk_attempt_to_connect(mqtt_wss_client client)
             continue;
         }
 
+        if (aclk_env->encoding == ACLK_ENC_PROTO) {
+            if (!aclk_env_has_capa("proto_node_chart")) {
+                error ("Can't encoding=proto without at least \"proto_node_chart\" capability.");
+                continue;
+            }
+            info("Switching ACLK to new protobuf protocol");
+            aclk_use_new_cloud_arch = 1;
+        }
+
         memset(&auth_url, 0, sizeof(url_t));
         if (url_parse(aclk_env->auth_endpoint, &auth_url)) {
             error("Parsing URL returned by env endpoint for authentication failed. \"%s\"", aclk_env->auth_endpoint);

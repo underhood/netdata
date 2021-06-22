@@ -405,8 +405,6 @@ static int wait_popcorning_finishes()
 {
     time_t elapsed;
     int need_wait;
-    if (aclk_use_new_cloud_arch)
-        return 0;
 
     while (!netdata_exit) {
         ACLK_SHARED_STATE_LOCK;
@@ -881,11 +879,6 @@ void aclk_add_collector(RRDHOST *host, const char *plugin_name, const char *modu
         return;
     }
 
-    if (aclk_use_new_cloud_arch) {
-        // TODO for now prevent sending old INFO payload
-        return;
-    }
-
     COLLECTOR_LOCK;
 
     tmp_collector = _add_collector(host->machine_guid, plugin_name, module_name);
@@ -903,10 +896,12 @@ void aclk_add_collector(RRDHOST *host, const char *plugin_name, const char *modu
     if (host != localhost)
         return;
 
-    query = aclk_query_new(METADATA_INFO);
-    query->data.metadata_info.host = localhost; //TODO
-    query->data.metadata_info.initial_on_connect = 0;
-    aclk_queue_query(query);
+    if (!aclk_use_new_cloud_arch) {
+        query = aclk_query_new(METADATA_INFO);
+        query->data.metadata_info.host = localhost;
+        query->data.metadata_info.initial_on_connect = 0;
+        aclk_queue_query(query);
+    }
 
     query = aclk_query_new(METADATA_ALARMS);
     query->data.metadata_alarms.initial_on_connect = 0;
@@ -926,11 +921,6 @@ void aclk_del_collector(RRDHOST *host, const char *plugin_name, const char *modu
     struct aclk_query *query;
     struct _collector *tmp_collector;
     if (unlikely(!netdata_ready)) {
-        return;
-    }
-
-    if (aclk_use_new_cloud_arch) {
-        // TODO for now prevent sending old INFO payload
         return;
     }
 
@@ -957,10 +947,12 @@ void aclk_del_collector(RRDHOST *host, const char *plugin_name, const char *modu
     if (host != localhost)
         return;
 
-    query = aclk_query_new(METADATA_INFO);
-    query->data.metadata_info.host = localhost; //TODO
-    query->data.metadata_info.initial_on_connect = 0;
-    aclk_queue_query(query);
+    if (!aclk_use_new_cloud_arch) {
+        query = aclk_query_new(METADATA_INFO);
+        query->data.metadata_info.host = localhost;
+        query->data.metadata_info.initial_on_connect = 0;
+        aclk_queue_query(query);
+    }
 
     query = aclk_query_new(METADATA_ALARMS);
     query->data.metadata_alarms.initial_on_connect = 0;

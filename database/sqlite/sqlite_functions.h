@@ -74,9 +74,17 @@ extern void sql_build_context_param_list(struct context_param **param_list, RRDH
 extern void store_claim_id(uuid_t *host_id, uuid_t *claim_id);
 extern int update_node_id(uuid_t *host_id, uuid_t *node_id);
 extern int get_node_id(uuid_t *host_id, uuid_t *node_id);
+extern int get_host_id(uuid_t *node_id, uuid_t *host_id);
 extern void invalidate_node_instances(uuid_t *host_id, uuid_t *claim_id);
 extern struct node_instance_list *get_node_list(void);
 extern void sql_load_node_id(RRDHOST *host);
 extern int alert_hash_and_store_config(uuid_t hash_id, const char *alarm, const char *template, const char *os, const char *host, const char *on, const char *families, const char *plugin, const char *module, const char *lookup,const char *calc, const char *every, const char *green,const char *red,const char *warn,const char *crit,const char *exec,const char *to,const char *units,const char *info,const char *classification, const char *component, const char *type, const char *delay,const char *options,const char *repeat,const char *host_labels);
 extern void sql_select_alert(char *hash_str, BUFFER *wb);
+extern void sql_health_alarm_log_load(RRDHOST *host);
+extern int sql_create_health_log_table(RRDHOST *host);
+extern void sql_health_alarm_log_update(RRDHOST *host, ALARM_ENTRY *ae);
+extern void sql_health_alarm_log_insert(RRDHOST *host, ALARM_ENTRY *ae);
+extern void sql_health_alarm_log_save(RRDHOST *host, ALARM_ENTRY *ae);
+extern void sql_health_alarm_log_select_all(BUFFER *wb, RRDHOST *host);
+extern void sql_health_alarm_log_cleanup(RRDHOST *host);
 #endif //NETDATA_SQLITE_FUNCTIONS_H
